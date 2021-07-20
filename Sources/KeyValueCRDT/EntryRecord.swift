@@ -27,14 +27,31 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
   }
 
   var value: Value {
-    if let text = text {
-      return .text(text)
-    } else if let json = json {
-      return .json(json)
-    } else if let blob = blob {
-      return .blob(blob)
-    } else {
-      return .null
+    get {
+      if let text = text {
+        return .text(text)
+      } else if let json = json {
+        return .json(json)
+      } else if let blob = blob {
+        return .blob(blob)
+      } else {
+        return .null
+      }
+    }
+    set {
+      text = nil
+      json = nil
+      blob = nil
+      switch newValue {
+      case .text(let text):
+        self.text = text
+      case .json(let json):
+        self.json = json
+      case .blob(let blob):
+        self.blob = blob
+      case .null:
+        break
+      }
     }
   }
 }

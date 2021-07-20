@@ -10,13 +10,19 @@ public final class KeyValueCRDT {
   public init(fileURL: URL?, author: Author) throws {
     self.fileURL = fileURL
     self.author = author
+    let databaseWriter: DatabaseWriter
     if let fileURL = fileURL {
-      self.databaseWriter = try DatabasePool.openSharedDatabase(at: fileURL, migrator: .keyValueCRDT)
+      databaseWriter = try DatabasePool.openSharedDatabase(at: fileURL, migrator: .keyValueCRDT)
     } else {
       let queue = try DatabaseQueue(path: ":memory:")
       try DatabaseMigrator.keyValueCRDT.migrate(queue)
-      self.databaseWriter = queue
+      databaseWriter = queue
     }
+    let authorRecord = try databaseWriter.read { db in
+      try AuthorRecord.filter(key: author.id).fetchOne(db)
+    }
+    self.databaseWriter = databaseWriter
+    self.authorRecord = authorRecord ?? AuthorRecord(id: author.id, name: author.name, usn: 0)
   }
 
   /// The file holding the key/value CRDT.
@@ -27,31 +33,16 @@ public final class KeyValueCRDT {
 
   private let databaseWriter: DatabaseWriter
 
+  /// Holds the current author record so we don't have to keep re-reading it.
+  private var authorRecord: AuthorRecord
+
   public func writeText(
     _ text: String,
     to key: String,
     scope: String = "",
     timestamp: Date = Date()
   ) throws {
-    try databaseWriter.write { db in
-      var authorRecord = try AuthorRecord.filter(key: self.author.id).fetchOne(db)
-      if authorRecord == nil {
-        authorRecord = AuthorRecord(id: self.author.id, name: self.author.name, usn: 0)
-      }
-      authorRecord!.usn += 1
-      try authorRecord!.save(db)
-      let entryRecord = EntryRecord(
-        scope: scope,
-        key: key,
-        authorId: self.author.id,
-        usn: authorRecord!.usn,
-        modifiedTimestamp: timestamp,
-        text: text,
-        json: nil,
-        blob: nil
-      )
-      try entryRecord.save(db)
-    }
+    try writeValue(.text(text), to: key, scope: scope, timestamp: timestamp)
   }
 
   public func read(
@@ -64,6 +55,47 @@ public final class KeyValueCRDT {
         .filter(EntryRecord.Column.scope == scope)
         .fetchAll(db)
     }
-    return records.map { Version($0) }
+    return records
+      .map { Version($0) }
+      .filter { $0.value != .null }
   }
+
+  public func delete(
+    key: String,
+    scope: String = "",
+    timestamp: Date = Date()
+  ) throws {
+    try writeValue(.null, to: key, scope: scope, timestamp: timestamp)
+  }
+}
+
+// MARK: - Private
+
+private extension KeyValueCRDT {
+  func incrementAuthorUSN(in database: Database) throws -> Int {
+    authorRecord.usn += 1
+    try authorRecord.save(database)
+    return authorRecord.usn
+  }
+
+  func writeValue(
+    _ value: Value,
+    to key: String,
+    scope: String = "",
+    timestamp: Date = Date()
+  ) throws {
+    try databaseWriter.write { db in
+      let usn = try incrementAuthorUSN(in: db)
+      var entryRecord = EntryRecord(
+        scope: scope,
+        key: key,
+        authorId: self.author.id,
+        usn: usn,
+        modifiedTimestamp: timestamp
+      )
+      entryRecord.value = value
+      try entryRecord.save(db)
+    }
+  }
+
 }
