@@ -50,7 +50,7 @@ public final class KeyValueCRDT {
         json: nil,
         blob: nil
       )
-      try entryRecord.insert(db)
+      try entryRecord.save(db)
     }
   }
 
