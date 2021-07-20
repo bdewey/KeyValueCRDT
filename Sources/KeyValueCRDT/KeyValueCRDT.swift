@@ -27,47 +27,6 @@ public final class KeyValueCRDT {
 
   private let databaseWriter: DatabaseWriter
 
-  /// The kinds of values that can be stored in the database.
-  public enum Value: Equatable {
-    case null
-    case text(String)
-    case json(String)
-    case blob(Data)
-  }
-
-  public struct TimestampedValue: Equatable {
-    public var timestamp: Date
-    public var value: Value
-  }
-
-  /// Stores a value into the database.
-  public func setValue(
-    _ value: Value,
-    key: String,
-    scope: String = "",
-    timestamp: Date = Date()
-  ) throws {
-    try databaseWriter.write { db in
-      var authorRecord = try AuthorRecord.filter(key: self.author.id).fetchOne(db)
-      if authorRecord == nil {
-        authorRecord = AuthorRecord(id: self.author.id, name: self.author.name, usn: 0)
-      }
-      authorRecord!.usn += 1
-      try authorRecord!.save(db)
-      let entryRecord = EntryRecord(
-        scope: scope,
-        key: key,
-        authorId: self.author.id,
-        usn: authorRecord!.usn,
-        modifiedTimestamp: timestamp,
-        text: nil,
-        json: nil,
-        blob: nil
-      )
-      try entryRecord.insert(db)
-    }
-  }
-
   public func writeText(
     _ text: String,
     to key: String,
@@ -98,16 +57,13 @@ public final class KeyValueCRDT {
   public func read(
     key: String,
     scope: String = ""
-  ) throws -> [UUID: TimestampedValue] {
+  ) throws -> [Version] {
     let records = try databaseWriter.read { db in
       try EntryRecord
         .filter(EntryRecord.Column.key == key)
         .filter(EntryRecord.Column.scope == scope)
         .fetchAll(db)
     }
-    let tuples = records.map { (key: $0.authorId, value: $0.timestampedValue) }
-    return Dictionary<UUID, TimestampedValue>(tuples, uniquingKeysWith: { a, b in
-      a.timestamp > b.timestamp ? a : b
-    })
+    return records.map { Version($0) }
   }
 }

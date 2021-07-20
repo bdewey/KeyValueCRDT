@@ -26,7 +26,7 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
     static let scope = GRDB.Column(CodingKeys.scope)
   }
 
-  var value: KeyValueCRDT.Value {
+  var value: Value {
     if let text = text {
       return .text(text)
     } else if let json = json {
@@ -36,9 +36,5 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
     } else {
       return .null
     }
-  }
-
-  var timestampedValue: KeyValueCRDT.TimestampedValue {
-    KeyValueCRDT.TimestampedValue(timestamp: modifiedTimestamp, value: value)
   }
 }

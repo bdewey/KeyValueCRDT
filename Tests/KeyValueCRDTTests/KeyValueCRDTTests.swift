@@ -8,6 +8,6 @@ final class KeyValueCRDTTests: XCTestCase {
     try crdt.writeText("Hello, world!", to: "key")
     let result = try crdt.read(key: "key")
     XCTAssertEqual(result.count, 1)
-    XCTAssertEqual(result.first?.value.value, .text("Hello, world!"))
+    XCTAssertEqual(result.first?.value, .text("Hello, world!"))
   }
 }
