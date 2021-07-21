@@ -8,7 +8,6 @@ public final class KeyValueCRDT {
   ///   - fileURL: The file holding the key/value CRDT.
   ///   - author: The author for any changes to the CRDT created by this instance.
   public init(fileURL: URL?, author: Author) throws {
-    self.fileURL = fileURL
     self.author = author
     let databaseWriter: DatabaseWriter
     if let fileURL = fileURL {
@@ -25,8 +24,23 @@ public final class KeyValueCRDT {
     self.authorRecord = authorRecord ?? AuthorRecord(id: author.id, name: author.name, usn: 0)
   }
 
-  /// The file holding the key/value CRDT. If nil, this is an in-memory instsance.
-  public let fileURL: URL?
+  // TODO: There's too much repetition between the initializers.
+  /// Creates a CRDT from an existing, initialized `DatabaseWriter`
+  public init(databaseWriter: DatabaseWriter, author: Author) throws {
+    self.author = author
+    self.databaseWriter = databaseWriter
+    let authorRecord = try databaseWriter.read { db in
+      try AuthorRecord.filter(key: author.id).fetchOne(db)
+    }
+    self.authorRecord = authorRecord ?? AuthorRecord(id: author.id, name: author.name, usn: 0)
+  }
+
+  /// Creates an in-memory clone of the database contents.
+  public func makeMemoryDatabaseQueue() throws -> DatabaseQueue {
+    let memoryQueue = try DatabaseQueue(path: ":memory:")
+    try databaseWriter.backup(to: memoryQueue)
+    return memoryQueue
+  }
 
   /// The author for any changes to the CRDT made by this instance.
   public let author: Author
@@ -81,7 +95,7 @@ public final class KeyValueCRDT {
       localVersion.formUnion(remoteVersion)
       try updateAuthors(localVersion, in: localDB)
       for record in remoteRecords {
-        try record.insert(localDB)
+        try record.save(localDB)
       }
     }
   }
@@ -125,7 +139,16 @@ private extension KeyValueCRDT {
 }
 
 private extension QueryInterfaceRequest where RowDecoder == EntryRecord {
+  // TODO: Fix the "needsList" terminology -- this is terrible
+  /// Filters the receiver to include only records greater than the versions specified by `needsList`
   func filter(_ needsList: [(key: AuthorVersionIdentifier, value: Int?)]) -> QueryInterfaceRequest<EntryRecord> {
-    self
+    let expressions = needsList.map { (key, value) -> SQLSpecificExpressible in
+      if let value = value {
+        return EntryRecord.Column.authorId == key.id && EntryRecord.Column.usn > value
+      } else {
+        return EntryRecord.Column.authorId == key.id
+      }
+    }
+    return self.filter(expressions.joined(operator: .or))
   }
 }

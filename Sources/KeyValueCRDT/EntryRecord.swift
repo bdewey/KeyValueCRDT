@@ -24,6 +24,8 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
   enum Column {
     static let key = GRDB.Column(CodingKeys.key)
     static let scope = GRDB.Column(CodingKeys.scope)
+    static let authorId = GRDB.Column(CodingKeys.authorId)
+    static let usn = GRDB.Column(CodingKeys.usn)
   }
 
   var value: Value {
