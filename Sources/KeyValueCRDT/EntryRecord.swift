@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  File
-//
-//  Created by Brian Dewey on 7/19/21.
-//
-
 import Foundation
 import GRDB
 
@@ -26,6 +19,9 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
     static let scope = GRDB.Column(CodingKeys.scope)
     static let authorId = GRDB.Column(CodingKeys.authorId)
     static let usn = GRDB.Column(CodingKeys.usn)
+    static let text = GRDB.Column(CodingKeys.text)
+    static let json = GRDB.Column(CodingKeys.json)
+    static let blob = GRDB.Column(CodingKeys.blob)
   }
 
   var value: Value {
@@ -37,7 +33,7 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
       } else if let blob = blob {
         return .blob(blob)
       } else {
-        return .null
+        fatalError("Entry has no corresponding value")
       }
     }
     set {
@@ -51,8 +47,6 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
         self.json = json
       case .blob(let blob):
         self.blob = blob
-      case .null:
-        break
       }
     }
   }

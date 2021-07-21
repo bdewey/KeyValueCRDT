@@ -69,9 +69,7 @@ public final class KeyValueCRDT {
         .filter(EntryRecord.Column.scope == scope)
         .fetchAll(db)
     }
-    return records
-      .map { Version($0) }
-      .filter { $0.value != .null }
+    return records.map { Version($0) }
   }
 
   public func delete(
@@ -79,23 +77,56 @@ public final class KeyValueCRDT {
     scope: String = "",
     timestamp: Date = Date()
   ) throws {
-    try writeValue(.null, to: key, scope: scope, timestamp: timestamp)
+    try databaseWriter.write { db in
+      let usn = try incrementAuthorUSN(in: db)
+      let existingRecords = try EntryRecord.filter(EntryRecord.Column.key == key).filter(EntryRecord.Column.scope == scope).fetchAll(db)
+      for existingRecord in existingRecords {
+        let tombstone = TombstoneRecord(existingRecord, deletingAuthorId: author.id, deletingUsn: usn)
+        try tombstone.insert(db)
+        try existingRecord.delete(db)
+      }
+    }
+  }
+
+  struct RemoteInfo {
+    let version: VersionVector<AuthorVersionIdentifier, Int>
+    let entries: [EntryRecord]
+    let tombstones: [TombstoneRecord]
   }
 
   public func merge(source: KeyValueCRDT) throws {
     try databaseWriter.write { localDB in
       var localVersion = VersionVector(try AuthorRecord.fetchAll(localDB))
 
-      let (remoteVersion, remoteRecords) = try source.databaseWriter.read { remoteDB -> (VersionVector<AuthorVersionIdentifier, Int>, [EntryRecord]) in
+      let remoteInfo = try source.databaseWriter.read { remoteDB -> RemoteInfo in
         let remoteVersion = VersionVector(try AuthorRecord.fetchAll(remoteDB))
         let needs = localVersion.needList(toMatch: remoteVersion)
-        let records = try EntryRecord.all().filter(needs).fetchAll(remoteDB)
-        return (remoteVersion, records)
+        let entries = try EntryRecord.all().filter(needs).fetchAll(remoteDB)
+        let tombstones = try TombstoneRecord.all().filter(needs).fetchAll(remoteDB)
+        return RemoteInfo(version: remoteVersion, entries: entries, tombstones: tombstones)
       }
-      localVersion.formUnion(remoteVersion)
+      localVersion.formUnion(remoteInfo.version)
       try updateAuthors(localVersion, in: localDB)
-      for record in remoteRecords {
+      try processTombstones(remoteInfo.tombstones, in: localDB)
+      for record in remoteInfo.entries {
         try record.save(localDB)
+      }
+    }
+  }
+
+  private func processTombstones(_ tombstones: [TombstoneRecord], in db: Database) throws {
+    for tombstone in tombstones {
+      let entry = try EntryRecord
+        .filter(key: [
+          EntryRecord.Column.scope.name: tombstone.scope,
+          EntryRecord.Column.key.name: tombstone.key,
+          EntryRecord.Column.authorId.name: tombstone.authorId,
+        ])
+        .fetchOne(db)
+      guard let entry = entry else { continue }
+      if entry.usn <= tombstone.usn {
+        try entry.delete(db)
+        try tombstone.insert(db)
       }
     }
   }
@@ -117,6 +148,7 @@ private extension KeyValueCRDT {
     timestamp: Date = Date()
   ) throws {
     try databaseWriter.write { db in
+      try setExistingRecordsToNull(key: key, scope: scope, db: db)
       let usn = try incrementAuthorUSN(in: db)
       var entryRecord = EntryRecord(
         scope: scope,
@@ -128,6 +160,17 @@ private extension KeyValueCRDT {
       entryRecord.value = value
       try entryRecord.save(db)
     }
+  }
+
+  func setExistingRecordsToNull(key: String, scope: String, db: Database) throws {
+    try EntryRecord
+      .filter(EntryRecord.Column.key == key)
+      .filter(EntryRecord.Column.scope == scope)
+      .updateAll(db, [
+        EntryRecord.Column.text.set(to: nil),
+        EntryRecord.Column.json.set(to: nil),
+        EntryRecord.Column.blob.set(to: nil),
+      ])
   }
 
   func updateAuthors(_ versionVector: VersionVector<AuthorVersionIdentifier, Int>, in db: Database) throws {
@@ -150,6 +193,19 @@ private extension QueryInterfaceRequest where RowDecoder == EntryRecord {
         return EntryRecord.Column.authorId == key.id && EntryRecord.Column.usn > value
       } else {
         return EntryRecord.Column.authorId == key.id
+      }
+    }
+    return self.filter(expressions.joined(operator: .or))
+  }
+}
+
+private extension QueryInterfaceRequest where RowDecoder == TombstoneRecord {
+  func filter(_ needsList: [(key: AuthorVersionIdentifier, value: Int?)]) -> QueryInterfaceRequest<TombstoneRecord> {
+    let expressions = needsList.map { (key, value) -> SQLSpecificExpressible in
+      if let value = value {
+        return TombstoneRecord.Column.deletingAuthorId == key.id && TombstoneRecord.Column.deletingUsn > value
+      } else {
+        return TombstoneRecord.Column.deletingAuthorId == key.id
       }
     }
     return self.filter(expressions.joined(operator: .or))

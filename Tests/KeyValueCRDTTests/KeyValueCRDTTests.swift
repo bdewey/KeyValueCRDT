@@ -99,6 +99,18 @@ final class KeyValueCRDTTests: XCTestCase {
     try modified.merge(source: original)
     XCTAssertEqual(try modified.read(key: "test").text, "Modified after merge")
   }
+
+  func testCreateDeleteUpdates() throws {
+    let alice = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let bob = try KeyValueCRDT(fileURL: nil, author: .bob)
+    try alice.writeText("v1", to: "test")
+    try bob.merge(source: alice)
+    XCTAssertEqual(try bob.read(key: "test").text, "v1")
+    try bob.delete(key: "test")
+    XCTAssertEqual(try bob.read(key: "test").count, 0)
+    try alice.merge(source: bob)
+    XCTAssertEqual(try alice.read(key: "test").count, 0)
+  }
 }
 
 private enum TestKey {

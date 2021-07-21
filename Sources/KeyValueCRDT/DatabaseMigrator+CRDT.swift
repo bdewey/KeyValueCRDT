@@ -21,6 +21,15 @@ internal extension DatabaseMigrator {
         td.column("json", .text)
         td.column("blob", .blob)
       })
+      try db.create(table: "tombstone", body: { td in
+        td.column("scope", .text).notNull()
+        td.column("key", .text).notNull()
+        td.column("authorId", .text).notNull().references("author", onDelete: .restrict)
+        td.column("usn", .integer).notNull()
+        td.column("deletingAuthorId", .text).notNull().references("author", onDelete: .restrict)
+        td.column("deletingUsn", .integer).notNull()
+        td.primaryKey(["scope", "key", "deletingAuthorId", "deletingUsn"])
+      })
     }
     return migrator
   }()
