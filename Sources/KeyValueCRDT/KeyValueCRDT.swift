@@ -134,6 +134,9 @@ private extension KeyValueCRDT {
     for (key, value) in versionVector {
       let authorRecord = AuthorRecord(id: key.id, name: key.name, usn: value)
       try authorRecord.save(db)
+      if authorRecord.id == author.id {
+        self.authorRecord = authorRecord
+      }
     }
   }
 }

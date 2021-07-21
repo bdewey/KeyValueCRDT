@@ -74,6 +74,31 @@ final class KeyValueCRDTTests: XCTestCase {
     XCTAssertEqual(try original.read(key: "test").text, "Version 2")
     XCTAssertEqual(try modified.read(key: "test").text, "Version 2")
   }
+
+  func testMergeUpdatesAuthorRecord() throws {
+    let original = try KeyValueCRDT(fileURL: nil, author: .alice)
+    try original.writeText("Version 1", to: "test")
+    let modified = try KeyValueCRDT(databaseWriter: try original.makeMemoryDatabaseQueue(), author: .alice)
+    for i in 2 ... 100 {
+      try modified.writeText("Version \(i)", to: "test")
+    }
+
+    // Changing `modified` doesn't change `original`
+    XCTAssertEqual(try original.read(key: "test").text, "Version 1")
+    XCTAssertEqual(try modified.read(key: "test").text, "Version 100")
+
+    // This will bring all of the changes from "modified" back to "original"
+    try original.merge(source: modified)
+    XCTAssertEqual(try original.read(key: "test").text, "Version 100")
+    XCTAssertEqual(try modified.read(key: "test").text, "Version 100")
+
+    // Here's the catch. If we forget to update the author record inside `original`, then the writes we make here
+    // will look "old" even though we're up-to-date.
+    try original.writeText("Modified after merge", to: "test")
+    XCTAssertEqual(try original.read(key: "test").text, "Modified after merge")
+    try modified.merge(source: original)
+    XCTAssertEqual(try modified.read(key: "test").text, "Modified after merge")
+  }
 }
 
 private enum TestKey {
