@@ -25,7 +25,7 @@ public final class KeyValueCRDT {
     self.authorRecord = authorRecord ?? AuthorRecord(id: author.id, name: author.name, usn: 0)
   }
 
-  /// The file holding the key/value CRDT.
+  /// The file holding the key/value CRDT. If nil, this is an in-memory instsance.
   public let fileURL: URL?
 
   /// The author for any changes to the CRDT made by this instance.
@@ -67,6 +67,24 @@ public final class KeyValueCRDT {
   ) throws {
     try writeValue(.null, to: key, scope: scope, timestamp: timestamp)
   }
+
+  public func merge(source: KeyValueCRDT) throws {
+    try databaseWriter.write { localDB in
+      var localVersion = VersionVector(try AuthorRecord.fetchAll(localDB))
+
+      let (remoteVersion, remoteRecords) = try source.databaseWriter.read { remoteDB -> (VersionVector<AuthorVersionIdentifier, Int>, [EntryRecord]) in
+        let remoteVersion = VersionVector(try AuthorRecord.fetchAll(remoteDB))
+        let needs = localVersion.needList(toMatch: remoteVersion)
+        let records = try EntryRecord.all().filter(needs).fetchAll(remoteDB)
+        return (remoteVersion, records)
+      }
+      localVersion.formUnion(remoteVersion)
+      try updateAuthors(localVersion, in: localDB)
+      for record in remoteRecords {
+        try record.insert(localDB)
+      }
+    }
+  }
 }
 
 // MARK: - Private
@@ -98,4 +116,16 @@ private extension KeyValueCRDT {
     }
   }
 
+  func updateAuthors(_ versionVector: VersionVector<AuthorVersionIdentifier, Int>, in db: Database) throws {
+    for (key, value) in versionVector {
+      let authorRecord = AuthorRecord(id: key.id, name: key.name, usn: value)
+      try authorRecord.save(db)
+    }
+  }
+}
+
+private extension QueryInterfaceRequest where RowDecoder == EntryRecord {
+  func filter(_ needsList: [(key: AuthorVersionIdentifier, value: Int?)]) -> QueryInterfaceRequest<EntryRecord> {
+    self
+  }
 }

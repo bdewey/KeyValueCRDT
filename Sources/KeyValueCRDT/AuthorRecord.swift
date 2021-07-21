@@ -9,7 +9,7 @@ import Foundation
 import GRDB
 
 /// Database representation of an entry in the Author table.
-internal struct AuthorRecord: Codable, FetchableRecord, MutablePersistableRecord {
+internal struct AuthorRecord: Codable, FetchableRecord, PersistableRecord {
   static let databaseTableName = "author"
   var id: UUID
   var name: String

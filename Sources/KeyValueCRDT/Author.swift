@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-/// A simple concrete struct conforming to ``AuthorProtocol``
+/// Identifies the authors of changes to the database.
 public struct Author: CustomStringConvertible {
   public init(id: UUID, name: String) {
     self.id = id
