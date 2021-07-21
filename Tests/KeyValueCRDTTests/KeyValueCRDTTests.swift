@@ -59,6 +59,21 @@ final class KeyValueCRDTTests: XCTestCase {
     XCTAssertEqual(try original.read(key: "test").text, "Version 1")
     XCTAssertEqual(try modified.read(key: "test").text, "Version 2")
   }
+
+  func testMergeWillMoveForwardInTime() throws {
+    let original = try KeyValueCRDT(fileURL: nil, author: .alice)
+    try original.writeText("Version 1", to: "test")
+    let modified = try KeyValueCRDT(databaseWriter: try original.makeMemoryDatabaseQueue(), author: .alice)
+    try modified.writeText("Version 2", to: "test")
+
+    // Changing `modified` doesn't change `original`
+    XCTAssertEqual(try original.read(key: "test").text, "Version 1")
+    XCTAssertEqual(try modified.read(key: "test").text, "Version 2")
+
+    try original.merge(source: modified)
+    XCTAssertEqual(try original.read(key: "test").text, "Version 2")
+    XCTAssertEqual(try modified.read(key: "test").text, "Version 2")
+  }
 }
 
 private enum TestKey {

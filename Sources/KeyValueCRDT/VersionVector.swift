@@ -30,7 +30,7 @@ struct VersionVector<Key, Value> where Key: Hashable, Value: Comparable {
         continue
       }
       if value > localValue {
-        needs.append((key: key, value: value))
+        needs.append((key: key, value: localValue))
       }
     }
     return needs
