@@ -9,7 +9,7 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
   var key: String
   var authorId: UUID
   var usn: Int
-  var modifiedTimestamp: Date
+  var timestamp: Date
   var text: String?
   var json: String?
   var blob: Data?

@@ -80,12 +80,6 @@ public final class KeyValueCRDT {
     try writeValue(.null, to: key, scope: scope, timestamp: timestamp)
   }
 
-  struct RemoteInfo {
-    let version: VersionVector<AuthorVersionIdentifier, Int>
-    let entries: [EntryRecord]
-    let tombstones: [TombstoneRecord]
-  }
-
   public func merge(source: KeyValueCRDT) throws {
     try databaseWriter.write { localDB in
       var localVersion = VersionVector(try AuthorRecord.fetchAll(localDB))
@@ -105,28 +99,17 @@ public final class KeyValueCRDT {
       }
     }
   }
-
-  private func processTombstones(_ tombstones: [TombstoneRecord], in db: Database) throws {
-    for tombstone in tombstones {
-      let entry = try EntryRecord
-        .filter(key: [
-          EntryRecord.Column.scope.name: tombstone.scope,
-          EntryRecord.Column.key.name: tombstone.key,
-          EntryRecord.Column.authorId.name: tombstone.authorId,
-        ])
-        .fetchOne(db)
-      guard let entry = entry else { continue }
-      if entry.usn <= tombstone.usn {
-        try entry.delete(db)
-        try tombstone.insert(db)
-      }
-    }
-  }
 }
 
 // MARK: - Private
 
 private extension KeyValueCRDT {
+  struct RemoteInfo {
+    let version: VersionVector<AuthorVersionIdentifier, Int>
+    let entries: [EntryRecord]
+    let tombstones: [TombstoneRecord]
+  }
+
   func incrementAuthorUSN(in database: Database) throws -> Int {
     authorRecord.usn += 1
     try authorRecord.save(database)
@@ -147,7 +130,7 @@ private extension KeyValueCRDT {
         key: key,
         authorId: self.author.id,
         usn: usn,
-        modifiedTimestamp: timestamp
+        timestamp: timestamp
       )
       entryRecord.value = value
       try entryRecord.save(db)
@@ -175,6 +158,23 @@ private extension KeyValueCRDT {
       try authorRecord.save(db)
       if authorRecord.id == author.id {
         self.authorRecord = authorRecord
+      }
+    }
+  }
+
+  func processTombstones(_ tombstones: [TombstoneRecord], in db: Database) throws {
+    for tombstone in tombstones {
+      let entry = try EntryRecord
+        .filter(key: [
+          EntryRecord.Column.scope.name: tombstone.scope,
+          EntryRecord.Column.key.name: tombstone.key,
+          EntryRecord.Column.authorId.name: tombstone.authorId,
+        ])
+        .fetchOne(db)
+      guard let entry = entry else { continue }
+      if entry.usn <= tombstone.usn {
+        try entry.delete(db)
+        try tombstone.insert(db)
       }
     }
   }

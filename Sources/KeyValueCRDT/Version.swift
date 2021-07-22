@@ -14,7 +14,7 @@ public struct Version: Equatable {
   /// Construct a Version from an EntryRecord
   init(_ record: EntryRecord) {
     self.authorID = record.authorId
-    self.timestamp = record.modifiedTimestamp
+    self.timestamp = record.timestamp
     self.value = record.value
   }
 }
