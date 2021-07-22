@@ -33,7 +33,7 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
       } else if let blob = blob {
         return .blob(blob)
       } else {
-        fatalError("Entry has no corresponding value")
+        return .null
       }
     }
     set {
@@ -47,6 +47,8 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
         self.json = json
       case .blob(let blob):
         self.blob = blob
+      case .null:
+        break
       }
     }
   }

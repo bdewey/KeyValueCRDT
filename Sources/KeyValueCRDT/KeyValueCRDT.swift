@@ -77,15 +77,7 @@ public final class KeyValueCRDT {
     scope: String = "",
     timestamp: Date = Date()
   ) throws {
-    try databaseWriter.write { db in
-      let usn = try incrementAuthorUSN(in: db)
-      let existingRecords = try EntryRecord.filter(EntryRecord.Column.key == key).filter(EntryRecord.Column.scope == scope).fetchAll(db)
-      for existingRecord in existingRecords {
-        let tombstone = TombstoneRecord(existingRecord, deletingAuthorId: author.id, deletingUsn: usn)
-        try tombstone.insert(db)
-        try existingRecord.delete(db)
-      }
-    }
+    try writeValue(.null, to: key, scope: scope, timestamp: timestamp)
   }
 
   struct RemoteInfo {
@@ -148,8 +140,8 @@ private extension KeyValueCRDT {
     timestamp: Date = Date()
   ) throws {
     try databaseWriter.write { db in
-      try setExistingRecordsToNull(key: key, scope: scope, db: db)
       let usn = try incrementAuthorUSN(in: db)
+      try createTombstones(key: key, scope: scope, usn: usn, db: db)
       var entryRecord = EntryRecord(
         scope: scope,
         key: key,
@@ -162,15 +154,19 @@ private extension KeyValueCRDT {
     }
   }
 
-  func setExistingRecordsToNull(key: String, scope: String, db: Database) throws {
-    try EntryRecord
+  func createTombstones(key: String, scope: String, usn: Int, db: Database) throws {
+    let existingRecords = try EntryRecord
       .filter(EntryRecord.Column.key == key)
       .filter(EntryRecord.Column.scope == scope)
-      .updateAll(db, [
-        EntryRecord.Column.text.set(to: nil),
-        EntryRecord.Column.json.set(to: nil),
-        EntryRecord.Column.blob.set(to: nil),
-      ])
+      .filter(EntryRecord.Column.authorId != author.id)
+      .fetchAll(db)
+    let tombstones = existingRecords.map { TombstoneRecord($0, deletingAuthorId: author.id, deletingUsn: usn) }
+    try tombstones.forEach {
+      try $0.insert(db)
+    }
+    try existingRecords.forEach {
+      try $0.delete(db)
+    }
   }
 
   func updateAuthors(_ versionVector: VersionVector<AuthorVersionIdentifier, Int>, in db: Database) throws {

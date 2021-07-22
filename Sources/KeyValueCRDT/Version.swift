@@ -30,4 +30,15 @@ extension Array where Element == Version {
       return self[0].value.text
     }
   }
+
+  public var isDeleted: Bool {
+    get throws {
+      if isEmpty {
+        return false // "deleted" is different from "doesn't exist"
+      } else if count > 1 {
+        throw KeyValueCRDTError.versionConflict
+      }
+      return self[0].value == .null
+    }
+  }
 }
