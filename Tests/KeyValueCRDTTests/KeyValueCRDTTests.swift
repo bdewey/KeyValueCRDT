@@ -126,6 +126,12 @@ final class KeyValueCRDTTests: XCTestCase {
     // We need to see both versions when we read.
     try alice.merge(source: bob)
     XCTAssertEqual(try alice.read(key: "test").count, 2)
+
+    // And we should wind up with the same state when we merge the other way
+    try bob.merge(source: alice)
+    XCTAssertEqual(try bob.read(key: "test").count, 2)
+
+    XCTAssertEqual(try alice.statistics, try bob.statistics)
   }
 }
 

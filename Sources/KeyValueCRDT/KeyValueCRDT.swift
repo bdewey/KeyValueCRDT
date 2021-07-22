@@ -1,7 +1,21 @@
 import Foundation
 import GRDB
 
-/// Implements a key/value store CRDT backed by a single sqlite database.
+/// Implements a key/value CRDT backed by a single sqlite database.
+///
+/// `KeyValueCRDT` provides a *scoped* key/value storage backed by a single sqlite database. The database is a *conflict-free replicated data type* (CRDT), meaning
+/// that multiple *authors* can edit copies of the database and later *merge* their changes and get consistent results. This makes `KeyValueCRDT` a good file format
+/// for files in cloud storage, such as iCloud Documents. Different devices can make changes while offline and reliably merge their changes with the cloud version of the document.
+///
+/// `KeyValueCRDT` provides *multi-value register* semantics for the key/value pairs stored in the database. This means:
+///
+/// * An author can *write* a single value for a key.
+/// * However, when *reading* a key, you may get multiple values. This happens when multiple authors make conflicting changes to a key -- the database keeps all of the conflicting
+/// updates. Any author can resolve the conflict using an appropriate algorithm and writing the resolved value back to the database. `KeyValueCRDT` does not resolve any
+/// conflicts on its own.
+///
+/// `KeyValueCRDT` provides *scoped* key/value storage. A *scope* is an arbitrary string that serves as a container for key/value pairs. The empty string is a valid scope
+/// and is the default scope for key/value pairs.
 public final class KeyValueCRDT {
   /// Initializes a CRDT using a specific file.
   /// - Parameters:
@@ -50,6 +64,25 @@ public final class KeyValueCRDT {
   /// Holds the current author record so we don't have to keep re-reading it.
   private var authorRecord: AuthorRecord
 
+  /// Gets the current number of entries in the database.
+  public var statistics: Statistics {
+    get throws {
+      try databaseWriter.read { db in
+        return Statistics(
+          entryCount: try EntryRecord.fetchCount(db),
+          authorCount: try AuthorRecord.fetchCount(db),
+          tombstoneCount: try TombstoneRecord.fetchCount(db)
+        )
+      }
+    }
+  }
+
+  /// Writes text to the database.
+  /// - Parameters:
+  ///   - text: The text to write.
+  ///   - key: The key associated with the value.
+  ///   - scope: The scope for the key.
+  ///   - timestamp: The timestamp to associate with this update.
   public func writeText(
     _ text: String,
     to key: String,
@@ -59,6 +92,17 @@ public final class KeyValueCRDT {
     try writeValue(.text(text), to: key, scope: scope, timestamp: timestamp)
   }
 
+  /// Read the value associated with a key in the database.
+  ///
+  /// ``KeyValueCRDT`` provides *multi-value register* semantics. When writing to the database, you always write a *single* value for a key.
+  /// However, when reading, you may get back *multiple values* in the event of an update conflict. It is up to the caller to decide what to do with multiple
+  /// values. (Use the one with the latest timestamp? Have the user pick which one to keep? Just treat all values equally?)
+  ///
+  /// In the event that there is more than one value for a key, the caller can *resolve* the conflict using an arbitrary algorithm and writing the resolved value back
+  /// to the database.
+  ///
+  /// - returns: An array of ``Version`` structs containing the values associated with the key. If the key has never been written to, this array will be empty. If there was
+  /// an update conflict for the key, the array will contain more than one entry.
   public func read(
     key: String,
     scope: String = ""
@@ -72,6 +116,7 @@ public final class KeyValueCRDT {
     return records.map { Version($0) }
   }
 
+  /// Delete a key from the database.
   public func delete(
     key: String,
     scope: String = "",
@@ -80,6 +125,7 @@ public final class KeyValueCRDT {
     try writeValue(.null, to: key, scope: scope, timestamp: timestamp)
   }
 
+  /// Merge another ``KeyValueCRDT`` into the receiver.
   public func merge(source: KeyValueCRDT) throws {
     try databaseWriter.write { localDB in
       var localVersion = VersionVector(try AuthorRecord.fetchAll(localDB))
@@ -96,6 +142,7 @@ public final class KeyValueCRDT {
       try processTombstones(remoteInfo.tombstones, in: localDB)
       for record in remoteInfo.entries {
         try record.save(localDB)
+        try garbageCollectTombstones(for: record, in: localDB)
       }
     }
   }
@@ -177,6 +224,16 @@ private extension KeyValueCRDT {
         try tombstone.insert(db)
       }
     }
+  }
+
+  /// Remove any tombstones that are now obsolete because we have a new entry
+  func garbageCollectTombstones(for entryRecord: EntryRecord, in db: Database) throws {
+    try TombstoneRecord
+      .filter(TombstoneRecord.Column.key == entryRecord.key)
+      .filter(TombstoneRecord.Column.scope == entryRecord.scope)
+      .filter(TombstoneRecord.Column.authorId == entryRecord.authorId)
+      .filter(TombstoneRecord.Column.usn < entryRecord.usn)
+      .deleteAll(db)
   }
 }
 
