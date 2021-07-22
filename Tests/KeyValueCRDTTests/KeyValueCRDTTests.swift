@@ -42,6 +42,13 @@ final class KeyValueCRDTTests: XCTestCase {
     XCTAssertEqual(try alice.read(key: TestKey.alice).text, "alice")
     XCTAssertEqual(try alice.read(key: TestKey.bob).text, "bob")
     XCTAssertEqual(try alice.read(key: TestKey.shared).count, 2)
+
+    let expectedKeys = Set([
+      ScopedKey(key: TestKey.alice),
+      ScopedKey(key: TestKey.bob),
+      ScopedKey(key: TestKey.shared),
+    ])
+    XCTAssertEqual(Set(try alice.keys), expectedKeys)
   }
 
   func testMergeDoesNotAllowTimeTravel() throws {

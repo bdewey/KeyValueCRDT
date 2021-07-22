@@ -77,6 +77,17 @@ public final class KeyValueCRDT {
     }
   }
 
+  /// All keys currently used in the database.
+  public var keys: [ScopedKey] {
+    get throws {
+      try databaseWriter.read { db in
+        let request = EntryRecord.select([EntryRecord.Column.scope, EntryRecord.Column.key])
+        let rows = try Row.fetchAll(db, request)
+        return rows.map { ScopedKey(scope: $0[0], key: $0[1]) }
+      }
+    }
+  }
+
   /// Writes text to the database.
   /// - Parameters:
   ///   - text: The text to write.
