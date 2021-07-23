@@ -42,6 +42,17 @@ extension Array where Element == Version {
     }
   }
 
+  public var blob: Data? {
+    get throws {
+      if isEmpty {
+        return nil
+      } else if count > 1 {
+        throw KeyValueCRDTError.versionConflict
+      }
+      return self[0].value.blob
+    }
+  }
+
   public var isDeleted: Bool {
     get throws {
       if isEmpty {

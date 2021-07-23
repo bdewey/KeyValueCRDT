@@ -23,6 +23,14 @@ public enum Value: Equatable {
     }
   }
 
+  public var blob: Data? {
+    if case .blob(let blob) = self {
+      return blob
+    } else {
+      return nil
+    }
+  }
+
   internal var entryType: EntryRecord.EntryType {
     switch self {
     case .null: return .null

@@ -206,6 +206,13 @@ final class KeyValueCRDTTests: XCTestCase {
       }
     }
   }
+
+  func testStoreBlob() throws {
+    let crdt = try KeyValueCRDT(fileURL: nil, author: .bob)
+    let data = "Hello, world!".data(using: .utf8)!
+    try crdt.writeBlob(data, to: "test")
+    XCTAssertEqual(data, try crdt.read(key: "test").blob)
+  }
 }
 
 private enum TestKey {
