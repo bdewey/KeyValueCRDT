@@ -3,6 +3,13 @@ import GRDB
 
 /// A record in the `entry` table.
 internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
+  enum EntryType: Int, Codable {
+    case null
+    case text
+    case json
+    case blob
+  }
+
   static let databaseTableName = "entry"
 
   var scope: String
@@ -10,6 +17,7 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
   var authorId: UUID
   var usn: Int
   var timestamp: Date
+  var type: EntryType
   var text: String?
   var json: String?
   var blob: Data?
@@ -19,6 +27,7 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
     static let scope = GRDB.Column(CodingKeys.scope)
     static let authorId = GRDB.Column(CodingKeys.authorId)
     static let usn = GRDB.Column(CodingKeys.usn)
+    static let type = GRDB.Column(CodingKeys.type)
     static let text = GRDB.Column(CodingKeys.text)
     static let json = GRDB.Column(CodingKeys.json)
     static let blob = GRDB.Column(CodingKeys.blob)

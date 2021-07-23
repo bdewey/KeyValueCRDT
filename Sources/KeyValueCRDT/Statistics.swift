@@ -9,11 +9,11 @@ public struct Statistics: Equatable {
   }
 
   /// How many entries are in the database.
-  let entryCount: Int
+  public let entryCount: Int
 
   /// How many authors are in the database.
-  let authorCount: Int
+  public let authorCount: Int
 
   /// How many tombstones are in the database.
-  let tombstoneCount: Int
+  public let tombstoneCount: Int
 }

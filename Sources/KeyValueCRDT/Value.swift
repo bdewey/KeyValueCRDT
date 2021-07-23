@@ -14,4 +14,13 @@ public enum Value: Equatable {
       return nil
     }
   }
+
+  internal var entryType: EntryRecord.EntryType {
+    switch self {
+    case .null: return .null
+    case .text: return .text
+    case .json: return .json
+    case .blob: return .blob
+    }
+  }
 }

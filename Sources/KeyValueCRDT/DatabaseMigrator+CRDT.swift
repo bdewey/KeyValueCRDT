@@ -16,6 +16,7 @@ internal extension DatabaseMigrator {
         td.column("authorId", .text).notNull().references("author", onDelete: .restrict)
         td.column("usn", .integer).notNull()
         td.column("timestamp", .datetime).notNull()
+        td.column("type", .integer).notNull()
         td.primaryKey(["scope", "key", "authorId"])
         td.column("text", .text)
         td.column("json", .text)

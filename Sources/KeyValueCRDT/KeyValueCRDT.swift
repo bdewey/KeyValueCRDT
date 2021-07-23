@@ -81,7 +81,10 @@ public final class KeyValueCRDT {
   public var keys: [ScopedKey] {
     get throws {
       try databaseWriter.read { db in
-        let request = EntryRecord.select([EntryRecord.Column.scope, EntryRecord.Column.key])
+        let request = EntryRecord
+          .filter(EntryRecord.Column.type != EntryRecord.EntryType.null.rawValue)
+          .select([EntryRecord.Column.scope, EntryRecord.Column.key])
+          .distinct()
         let rows = try Row.fetchAll(db, request)
         return rows.map { ScopedKey(scope: $0[0], key: $0[1]) }
       }
@@ -188,7 +191,8 @@ private extension KeyValueCRDT {
         key: key,
         authorId: self.author.id,
         usn: usn,
-        timestamp: timestamp
+        timestamp: timestamp,
+        type: value.entryType
       )
       entryRecord.value = value
       try entryRecord.save(db)

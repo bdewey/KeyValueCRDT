@@ -140,6 +140,29 @@ final class KeyValueCRDTTests: XCTestCase {
 
     XCTAssertEqual(try alice.statistics, try bob.statistics)
   }
+
+  func testDeletedKeysDontShowUp() throws {
+    let alice = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let bob = try KeyValueCRDT(fileURL: nil, author: .bob)
+    try alice.writeText("v1", to: "test")
+    try bob.merge(source: alice)
+    XCTAssertEqual(try bob.read(key: "test").text, "v1")
+    try bob.delete(key: "test")
+    XCTAssert(try bob.read(key: "test").isDeleted)
+    try alice.writeText("v2", to: "test")
+
+    // At this point, Bob has deleted the key and Alice has changed it: Conflict.
+    // We need to see both versions when we read.
+    try alice.merge(source: bob)
+    XCTAssertEqual(try alice.read(key: "test").count, 2)
+
+    // There's 1 key that has two values
+    XCTAssertEqual(try alice.keys.count, 1)
+    XCTAssertEqual(try alice.statistics.entryCount, 2)
+    try alice.delete(key: "test")
+    XCTAssertEqual(try alice.keys.count, 0)
+    XCTAssertEqual(try alice.statistics.entryCount, 1)
+  }
 }
 
 private enum TestKey {
