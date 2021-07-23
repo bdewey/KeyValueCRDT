@@ -183,6 +183,13 @@ final class KeyValueCRDTTests: XCTestCase {
       Set(try crdt.keys(scope: "scope 1"))
     )
   }
+
+  func testSearch() throws {
+    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    try crdt.writeText("Four score and seven years ago", to: "gettysburg")
+    try crdt.writeText("Shall I compare thee to a summer's day?", to: "shakespeare")
+    XCTAssertEqual([ScopedKey(key: "shakespeare")], try crdt.searchText(for: "summer"))
+  }
 }
 
 private enum TestKey {

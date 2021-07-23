@@ -22,6 +22,12 @@ internal extension DatabaseMigrator {
         td.column("json", .text)
         td.column("blob", .blob)
       })
+      // TODO: Get FTS5 working!
+      try db.create(virtualTable: "entryFullText", using: FTS4()) { table in
+        table.synchronize(withTable: "entry")
+        table.column("text")
+        table.tokenizer = .porter
+      }
       try db.create(table: "tombstone", body: { td in
         td.column("scope", .text).notNull()
         td.column("key", .text).notNull()

@@ -147,6 +147,20 @@ public final class KeyValueCRDT {
     try writeValue(.null, to: key, scope: scope, timestamp: timestamp)
   }
 
+  /// Searches all text values for `searchTerm` and returns the matching keys.
+  public func searchText(for searchTerm: String) throws -> [ScopedKey] {
+    let pattern = FTS3Pattern(matchingAllTokensIn: searchTerm)
+    let sql = """
+SELECT entry.scope, entry.key
+FROM entry
+JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH ?
+"""
+    return try databaseWriter.read { db in
+      let rows = try Row.fetchAll(db, sql: sql, arguments: [pattern])
+      return rows.map { ScopedKey(scope: $0[0], key: $0[1]) }
+    }
+  }
+
   /// Merge another ``KeyValueCRDT`` into the receiver.
   public func merge(source: KeyValueCRDT) throws {
     try databaseWriter.write { localDB in
