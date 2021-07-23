@@ -100,6 +100,9 @@ public final class KeyValueCRDT {
   }
 
   /// Writes text to the database.
+  ///
+  /// All text is full-text indexed. In addition to getting the text via ``read(key:scope:)``, you can also search for text with ``searchText(for:)``.
+  ///
   /// - Parameters:
   ///   - text: The text to write.
   ///   - key: The key associated with the value.
@@ -112,6 +115,16 @@ public final class KeyValueCRDT {
     timestamp: Date = Date()
   ) throws {
     try writeValue(.text(text), to: key, scope: scope, timestamp: timestamp)
+  }
+
+  /// Writes json to the database.
+  /// - Parameters:
+  ///   - json: The json string to write.
+  ///   - key: The key associated with the value.
+  ///   - scope: The scope for the key.
+  ///   - timestamp: The timestamp to associate with this update.
+  public func writeJson(_ json: String, to key: String, scope: String = "", timestamp: Date = Date()) throws {
+    try writeValue(.json(json), to: key, scope: scope, timestamp: timestamp)
   }
 
   /// Read the value associated with a key in the database.

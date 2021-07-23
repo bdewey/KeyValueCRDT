@@ -15,6 +15,14 @@ public enum Value: Equatable {
     }
   }
 
+  public var json: String? {
+    if case .json(let json) = self {
+      return json
+    } else {
+      return nil
+    }
+  }
+
   internal var entryType: EntryRecord.EntryType {
     switch self {
     case .null: return .null

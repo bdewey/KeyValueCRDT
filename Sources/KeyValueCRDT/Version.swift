@@ -31,6 +31,17 @@ extension Array where Element == Version {
     }
   }
 
+  public var json: String? {
+    get throws {
+      if isEmpty {
+        return nil
+      } else if count > 1 {
+        throw KeyValueCRDTError.versionConflict
+      }
+      return self[0].value.json
+    }
+  }
+
   public var isDeleted: Bool {
     get throws {
       if isEmpty {

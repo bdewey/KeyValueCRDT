@@ -190,6 +190,12 @@ final class KeyValueCRDTTests: XCTestCase {
     try crdt.writeText("Shall I compare thee to a summer's day?", to: "shakespeare")
     XCTAssertEqual([ScopedKey(key: "shakespeare")], try crdt.searchText(for: "summer"))
   }
+
+  func testStoreJSON() throws {
+    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    try crdt.writeJson("{a: 21}", to: "json")
+    XCTAssertEqual("{a: 21}", try crdt.read(key: "json").json)
+  }
 }
 
 private enum TestKey {
