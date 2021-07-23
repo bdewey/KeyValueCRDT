@@ -80,14 +80,22 @@ public final class KeyValueCRDT {
   /// All keys currently used in the database.
   public var keys: [ScopedKey] {
     get throws {
-      try databaseWriter.read { db in
-        let request = EntryRecord
-          .filter(EntryRecord.Column.type != EntryRecord.EntryType.null.rawValue)
-          .select([EntryRecord.Column.scope, EntryRecord.Column.key])
-          .distinct()
-        let rows = try Row.fetchAll(db, request)
-        return rows.map { ScopedKey(scope: $0[0], key: $0[1]) }
-      }
+      try self.keys()
+    }
+  }
+
+  public func keys(scope: String? = nil, key: String? = nil) throws -> [ScopedKey] {
+    var request = EntryRecord
+      .filter(EntryRecord.Column.type != EntryRecord.EntryType.null.rawValue)
+    if let scope = scope {
+      request = request.filter(EntryRecord.Column.scope == scope)
+    }
+    if let key = key {
+      request = request.filter(EntryRecord.Column.key == key)
+    }
+    return try databaseWriter.read { db in
+      let rows = try Row.fetchAll(db, request)
+      return rows.map { ScopedKey(scope: $0[0], key: $0[1]) }
     }
   }
 

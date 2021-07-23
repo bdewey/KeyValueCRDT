@@ -163,6 +163,26 @@ final class KeyValueCRDTTests: XCTestCase {
     XCTAssertEqual(try alice.keys.count, 0)
     XCTAssertEqual(try alice.statistics.entryCount, 1)
   }
+
+  func testKeyScopingWorks() throws {
+    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    try crdt.writeText("scope 1", to: "test", scope: "scope 1")
+    try crdt.writeText("scope 2", to: "test", scope: "scope 2")
+    XCTAssertEqual(try crdt.keys.count, 2)
+    XCTAssertEqual("scope 1", try crdt.read(key: "test", scope: "scope 1").text)
+    XCTAssertEqual("scope 2", try crdt.read(key: "test", scope: "scope 2").text)
+
+    try crdt.writeText("bonus", to: "bonus")
+    XCTAssertEqual(try crdt.keys.count, 3)
+    XCTAssertEqual(
+      Set([ScopedKey(scope: "scope 1", key: "test"), ScopedKey(scope: "scope 2", key: "test")]),
+      Set(try crdt.keys(key: "test"))
+    )
+    XCTAssertEqual(
+      Set([ScopedKey(scope: "scope 1", key: "test")]),
+      Set(try crdt.keys(scope: "scope 1"))
+    )
+  }
 }
 
 private enum TestKey {
