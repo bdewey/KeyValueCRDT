@@ -219,6 +219,12 @@ private extension KeyValueCRDT {
     timestamp: Date = Date()
   ) throws {
     try databaseWriter.write { db in
+      if let json = value.json {
+        let result = try Int.fetchOne(db, sql: "SELECT json_valid(?);", arguments: [json])
+        if result != 1 {
+          throw KeyValueCRDTError.invalidJSON
+        }
+      }
       let usn = try incrementAuthorUSN(in: db)
       try createTombstones(key: key, scope: scope, usn: usn, db: db)
       var entryRecord = EntryRecord(

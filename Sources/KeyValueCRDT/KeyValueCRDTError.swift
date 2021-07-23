@@ -6,4 +6,7 @@ public enum KeyValueCRDTError: Error {
 
   /// There are conflicting versions of a value in a code path that asserted there should be only one.
   case versionConflict
+
+  /// Attempted to write invalid JSON as a JSON string.
+  case invalidJSON
 }

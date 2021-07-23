@@ -193,8 +193,18 @@ final class KeyValueCRDTTests: XCTestCase {
 
   func testStoreJSON() throws {
     let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
-    try crdt.writeJson("{a: 21}", to: "json")
-    XCTAssertEqual("{a: 21}", try crdt.read(key: "json").json)
+    try crdt.writeJson(#"{"a": 21}"#, to: "json")
+    XCTAssertEqual(#"{"a": 21}"#, try crdt.read(key: "json").json)
+  }
+
+  func testInvalidJSONThrows() throws {
+    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    XCTAssertThrowsError(try crdt.writeJson("This isn't JSON", to: "not json"), "This is a mistake") { error in
+      XCTAssert(error is KeyValueCRDTError)
+      if let error = error as? KeyValueCRDTError {
+        XCTAssertEqual(KeyValueCRDTError.invalidJSON, error)
+      }
+    }
   }
 }
 
