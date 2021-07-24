@@ -17,14 +17,23 @@ let package = Package(
         ),
     ],
     dependencies: [
-      .package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMajor(from: "5.8.0")),
+      .package(url: "https://github.com/bdewey/GRDB.swift", branch: "xcode13"),
+//      .package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMajor(from: "5.8.0")),
       .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
+      .package(url: "https://github.com/apple/swift-argument-parser", from: "0.4.0"),
     ],
     targets: [
         .target(
             name: "KeyValueCRDT",
             dependencies: [
               .product(name: "GRDB", package: "GRDB.swift"),
+            ]
+        ),
+        .executableTarget(
+            name: "kvcrdt",
+            dependencies: [
+              .product(name: "ArgumentParser", package: "swift-argument-parser"),
+              "KeyValueCRDT",
             ]
         ),
         .testTarget(

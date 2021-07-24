@@ -3,11 +3,20 @@
     "pins": [
       {
         "package": "GRDB.swift",
-        "repositoryURL": "https://github.com/groue/GRDB.swift.git",
+        "repositoryURL": "https://github.com/bdewey/GRDB.swift",
+        "state": {
+          "branch": "xcode13",
+          "revision": "a796aa920f4a24c2e5d4934e4fb7eec64104f1d0",
+          "version": null
+        }
+      },
+      {
+        "package": "swift-argument-parser",
+        "repositoryURL": "https://github.com/apple/swift-argument-parser",
         "state": {
           "branch": null,
-          "revision": "af13c91744ad8607c94ffbca3b0f98fa00692417",
-          "version": "5.8.0"
+          "revision": "986d191f94cec88f6350056da59c2e59e83d1229",
+          "version": "0.4.3"
         }
       },
       {
