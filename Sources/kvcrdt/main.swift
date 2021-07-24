@@ -14,7 +14,7 @@ struct KVCRDT: ParsableCommand {
   static var configuration = CommandConfiguration(
     commandName: "kvcrdt",
     abstract: "View and manipulate a key-value CRDT",
-    subcommands: [Statistics.self],
+    subcommands: [Statistics.self, List.self],
     defaultSubcommand: Statistics.self
   )
 }
@@ -36,6 +36,25 @@ Tombstones: \(stats.tombstoneCount)
 Authors:    \(stats.authorCount)
 """
     print(output)
+  }
+}
+
+struct List: ParsableCommand {
+  static var configuration = CommandConfiguration(abstract: "List the keys in the key-value CRDT")
+
+  @OptionGroup var input: Options
+
+  func run() throws {
+    guard let fileURL = URL(string: input.inputFileName) else {
+      throw KVCRDTError.invalidFile
+    }
+    let crdt = try KeyValueCRDT(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
+    let scopedKeys = try crdt.keys
+    let table = Table<ScopedKey>(columns: [
+      Table.Column(name: "Scope", formatter: { $0.scope }),
+      Table.Column(name: "Key", formatter: { $0.key }),
+    ], rows: scopedKeys)
+    print("\(table)")
   }
 }
 
