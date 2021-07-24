@@ -234,6 +234,18 @@ final class KeyValueCRDTTests: XCTestCase {
     XCTAssertEqual(filteredResults.count, 1)
     XCTAssertEqual(try filteredResults[ScopedKey(key: TestKey.alice)]?.text, "alice")
   }
+
+  func testBulkWrite() throws {
+    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let values: [ScopedKey: Value] = [
+      ScopedKey(key: TestKey.alice): .text("Alice"),
+      ScopedKey(key: TestKey.shared): .json("42"),
+    ]
+    try crdt.bulkWrite(values)
+    XCTAssertEqual(try crdt.statistics.entryCount, 2)
+    XCTAssertEqual(try crdt.read(key: TestKey.alice).text, "Alice")
+    XCTAssertEqual(try crdt.read(key: TestKey.shared).json, "42")
+  }
 }
 
 private enum TestKey {

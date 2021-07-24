@@ -186,6 +186,18 @@ public final class KeyValueCRDT {
     return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
   }
 
+  /// Writes multiple values to the database in a single transaction.
+  /// - Parameter values: Mapping of keys/values to write to the database.
+  /// - Parameter timestamp: The timestamp to associate with the updated values.
+  public func bulkWrite(_ values: [ScopedKey: Value], timestamp: Date = Date()) throws {
+    try databaseWriter.write { db in
+      let usn = try incrementAuthorUSN(in: db)
+      for (key, value) in values {
+        try writeValue(value, to: key.key, scope: key.scope, timestamp: timestamp, in: db, usn: usn)
+      }
+    }
+  }
+
   /// Delete a key from the database.
   public func delete(
     key: String,
@@ -250,29 +262,40 @@ private extension KeyValueCRDT {
   func writeValue(
     _ value: Value,
     to key: String,
-    scope: String = "",
-    timestamp: Date = Date()
+    scope: String,
+    timestamp: Date
   ) throws {
     try databaseWriter.write { db in
-      if let json = value.json {
-        let result = try Int.fetchOne(db, sql: "SELECT json_valid(?);", arguments: [json])
-        if result != 1 {
-          throw KeyValueCRDTError.invalidJSON
-        }
-      }
       let usn = try incrementAuthorUSN(in: db)
-      try createTombstones(key: key, scope: scope, usn: usn, db: db)
-      var entryRecord = EntryRecord(
-        scope: scope,
-        key: key,
-        authorId: self.author.id,
-        usn: usn,
-        timestamp: timestamp,
-        type: value.entryType
-      )
-      entryRecord.value = value
-      try entryRecord.save(db)
+      try writeValue(value, to: key, scope: scope, timestamp: timestamp, in: db, usn: usn)
     }
+  }
+
+  func writeValue(
+    _ value: Value,
+    to key: String,
+    scope: String,
+    timestamp: Date,
+    in db: Database,
+    usn: Int
+  ) throws {
+    if let json = value.json {
+      let result = try Int.fetchOne(db, sql: "SELECT json_valid(?);", arguments: [json])
+      if result != 1 {
+        throw KeyValueCRDTError.invalidJSON
+      }
+    }
+    try createTombstones(key: key, scope: scope, usn: usn, db: db)
+    var entryRecord = EntryRecord(
+      scope: scope,
+      key: key,
+      authorId: self.author.id,
+      usn: usn,
+      timestamp: timestamp,
+      type: value.entryType
+    )
+    entryRecord.value = value
+    try entryRecord.save(db)
   }
 
   func createTombstones(key: String, scope: String, usn: Int, db: Database) throws {
