@@ -43,13 +43,15 @@ struct List: ParsableCommand {
   static var configuration = CommandConfiguration(abstract: "List the keys in the key-value CRDT")
 
   @OptionGroup var input: InputOptions
+  @Option var scope: String?
+  @Option var key: String?
 
   func run() throws {
     guard let fileURL = URL(string: input.inputFileName) else {
       throw KVCRDTError.invalidFile
     }
     let crdt = try KeyValueCRDT(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
-    let scopedKeys = try crdt.keys
+    let scopedKeys = try crdt.keys(scope: scope, key: key)
     let table = Table<ScopedKey>(columns: [
       Table.Column(name: "Scope", formatter: { $0.scope }),
       Table.Column(name: "Key", formatter: { $0.key }),
@@ -90,8 +92,9 @@ func printVersion(_ version: Version, showHeader: Bool = false) throws {
     let object = try JSONSerialization.jsonObject(with: data, options: [])
     let formattedOutput = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
     print(String(data: formattedOutput, encoding: .utf8)!)
-  case .blob(let data):
-    print("Binary data: \(data.count) byte(s)")
+  case .blob(let mimeType, let data):
+    let sizeString = ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)
+    print("Binary data: type = \(mimeType), size = \(sizeString)")
   case .null:
     print("DELETED")
   }
