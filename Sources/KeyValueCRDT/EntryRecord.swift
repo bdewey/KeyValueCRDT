@@ -20,6 +20,7 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
   var type: EntryType
   var text: String?
   var json: String?
+  var blobMimeType: String?
   var blob: Data?
 
   enum Column {
@@ -40,7 +41,7 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
       } else if let json = json {
         return .json(json)
       } else if let blob = blob {
-        return .blob(blob)
+        return .blob(mimeType: blobMimeType ?? "application/octet-stream", blob: blob)
       } else {
         return .null
       }
@@ -48,13 +49,15 @@ internal struct EntryRecord: Codable, FetchableRecord, PersistableRecord {
     set {
       text = nil
       json = nil
+      blobMimeType = nil
       blob = nil
       switch newValue {
       case .text(let text):
         self.text = text
       case .json(let json):
         self.json = json
-      case .blob(let blob):
+      case .blob(let mimeType, let blob):
+        self.blobMimeType = mimeType
         self.blob = blob
       case .null:
         break

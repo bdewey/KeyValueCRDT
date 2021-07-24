@@ -139,8 +139,14 @@ public final class KeyValueCRDT {
   ///   - key: The key associated with the value.
   ///   - scope: The scope for the key.
   ///   - timestamp: The timestamp to associate with this update.
-  public func writeBlob(_ blob: Data, to key: String, scope: String = "", timestamp: Date = Date()) throws {
-    try writeValue(.blob(blob), to: key, scope: scope, timestamp: timestamp)
+  public func writeBlob(
+    _ blob: Data,
+    to key: String,
+    scope: String = "",
+    mimeType: String = "application/octet-stream",
+    timestamp: Date = Date()
+  ) throws {
+    try writeValue(.blob(mimeType: mimeType, blob: blob), to: key, scope: scope, timestamp: timestamp)
   }
 
   /// Read the value associated with a key in the database.

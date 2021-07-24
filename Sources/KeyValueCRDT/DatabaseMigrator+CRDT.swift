@@ -20,6 +20,7 @@ internal extension DatabaseMigrator {
         td.primaryKey(["scope", "key", "authorId"])
         td.column("text", .text)
         td.column("json", .text)
+        td.column("blobMimeType", .text)
         td.column("blob", .blob)
       })
       // TODO: Get FTS5 working!

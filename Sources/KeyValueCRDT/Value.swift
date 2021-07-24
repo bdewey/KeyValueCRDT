@@ -5,7 +5,7 @@ public enum Value: Equatable {
   case null
   case text(String)
   case json(String)
-  case blob(Data)
+  case blob(mimeType: String, blob: Data)
 
   public var text: String? {
     if case .text(let text) = self {
@@ -24,7 +24,7 @@ public enum Value: Equatable {
   }
 
   public var blob: Data? {
-    if case .blob(let blob) = self {
+    if case .blob(_, let blob) = self {
       return blob
     } else {
       return nil
