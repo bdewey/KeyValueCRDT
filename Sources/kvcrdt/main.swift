@@ -73,12 +73,12 @@ struct Get: ParsableCommand {
     let versions = try crdt.read(key: key, scope: scope)
     let showHeader = versions.count > 1
     for version in versions {
-      printVersion(version, showHeader: showHeader)
+      try printVersion(version, showHeader: showHeader)
     }
   }
 }
 
-func printVersion(_ version: Version, showHeader: Bool = false) {
+func printVersion(_ version: Version, showHeader: Bool = false) throws {
   if showHeader {
     print("Updated from \(version.authorID) at \(version.timestamp):")
   }
@@ -86,7 +86,10 @@ func printVersion(_ version: Version, showHeader: Bool = false) {
   case .text(let text):
     print(text)
   case .json(let json):
-    print(json)
+    let data = json.data(using: .utf8)!
+    let object = try JSONSerialization.jsonObject(with: data, options: [])
+    let formattedOutput = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+    print(String(data: formattedOutput, encoding: .utf8)!)
   case .blob(let data):
     print("Binary data: \(data.count) byte(s)")
   case .null:
