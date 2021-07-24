@@ -213,6 +213,27 @@ final class KeyValueCRDTTests: XCTestCase {
     try crdt.writeBlob(data, to: "test")
     XCTAssertEqual(data, try crdt.read(key: "test").blob)
   }
+
+  func testBulkRead() throws {
+    let alice = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let bob = try KeyValueCRDT(fileURL: nil, author: .bob)
+
+    try alice.writeText("alice", to: TestKey.alice)
+    try alice.writeText("alice shared", to: TestKey.shared)
+
+    try bob.writeText("bob", to: TestKey.bob)
+    try bob.writeText("bob shared", to: TestKey.shared)
+
+    try alice.merge(source: bob)
+    let results = try alice.bulkRead()
+    XCTAssertEqual(try results[ScopedKey(key: TestKey.alice)]?.text, "alice")
+    XCTAssertEqual(try results[ScopedKey(key: TestKey.bob)]?.text, "bob")
+    XCTAssertEqual(results[ScopedKey(key: TestKey.shared)]?.count, 2)
+
+    let filteredResults = try alice.bulkRead(key: TestKey.alice)
+    XCTAssertEqual(filteredResults.count, 1)
+    XCTAssertEqual(try filteredResults[ScopedKey(key: TestKey.alice)]?.text, "alice")
+  }
 }
 
 private enum TestKey {

@@ -13,3 +13,10 @@ public struct ScopedKey: Hashable {
   /// The key.
   public let key: String
 }
+
+internal extension ScopedKey {
+  init(_ entryRecord: EntryRecord) {
+    self.scope = entryRecord.scope
+    self.key = entryRecord.key
+  }
+}

@@ -84,6 +84,11 @@ public final class KeyValueCRDT {
     }
   }
 
+  /// All keys currently used in the database, optionally filtered by scope key.
+  /// - Parameters:
+  ///   - scope: If present, only keys in the matching scope will be returned.
+  ///   - key: If present, only keys matching this key will be returned. This is useful to find all *scopes* that contain a key.
+  /// - Returns: An array of *scope* / *key* pairs that match the given criteria.
   public func keys(scope: String? = nil, key: String? = nil) throws -> [ScopedKey] {
     var request = EntryRecord
       .filter(EntryRecord.Column.type != EntryRecord.EntryType.null.rawValue)
@@ -160,6 +165,25 @@ public final class KeyValueCRDT {
         .fetchAll(db)
     }
     return records.map { Version($0) }
+  }
+
+  /// Bulk-read: Returns the values for all matching keys.
+  /// - Parameters:
+  ///   - scope: If present, limits the results only to values in this scope.
+  ///   - key: If present, limits the results only to values with this key.
+  /// - Returns: A mapping of ``ScopedKey`` structs to ``Version`` arrays holding the values associated with the key. If there was an update conflict for the key, the ``Version`` array will contain more than one entry.
+  public func bulkRead(scope: String? = nil, key: String? = nil) throws -> [ScopedKey: [Version]] {
+    var query = EntryRecord.all()
+    if let scope = scope {
+      query = query.filter(EntryRecord.Column.scope == scope)
+    }
+    if let key = key {
+      query = query.filter(EntryRecord.Column.key == key)
+    }
+    let records = try databaseWriter.read { db in
+      try query.fetchAll(db)
+    }
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
   }
 
   /// Delete a key from the database.
