@@ -21,26 +21,25 @@ public final class KeyValueCRDT {
   /// - Parameters:
   ///   - fileURL: The file holding the key/value CRDT.
   ///   - author: The author for any changes to the CRDT created by this instance.
-  public init(fileURL: URL?, author: Author) throws {
-    self.author = author
+  public convenience init(fileURL: URL?, author: Author) throws {
     let databaseWriter: DatabaseWriter
     if let fileURL = fileURL {
-      databaseWriter = try DatabasePool.openSharedDatabase(at: fileURL, migrator: .keyValueCRDT)
+      databaseWriter = try DatabasePool.openSharedDatabase(at: fileURL)
     } else {
       let queue = try DatabaseQueue(path: ":memory:")
-      try DatabaseMigrator.keyValueCRDT.migrate(queue)
       databaseWriter = queue
     }
-    let authorRecord = try databaseWriter.read { db in
-      try AuthorRecord.filter(key: author.id).fetchOne(db)
-    }
-    self.databaseWriter = databaseWriter
-    self.authorRecord = authorRecord ?? AuthorRecord(id: author.id, name: author.name, usn: 0)
+    try self.init(databaseWriter: databaseWriter, author: author)
   }
 
   // TODO: There's too much repetition between the initializers.
   /// Creates a CRDT from an existing, initialized `DatabaseWriter`
   public init(databaseWriter: DatabaseWriter, author: Author) throws {
+    try DatabaseMigrator.keyValueCRDT.migrate(databaseWriter)
+    if try databaseWriter.read(DatabaseMigrator.keyValueCRDT.hasBeenSuperseded) {
+      // Database is too recent
+      throw KeyValueCRDTError.databaseSchemaTooNew
+    }
     self.author = author
     self.databaseWriter = databaseWriter
     let authorRecord = try databaseWriter.read { db in
