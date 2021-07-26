@@ -213,6 +213,23 @@ public final class KeyValueCRDT {
       .publisher(in: databaseWriter)
   }
 
+  /// Publishes a notification whenever there are changes to matching keys.
+  /// - Parameters:
+  ///   - scope: If present, limits the results only to values in this scope.
+  ///   - key: If present, limits the results only to values with this key.
+  /// - Returns: A publisher of mappings of ``ScopedKey`` structs to ``Version`` arrays holding the values associated with the key.
+  public func didChangePublisher(scope: String? = nil, key: String? = nil) throws -> some Publisher {
+    var query = EntryRecord.all()
+    if let scope = scope {
+      query = query.filter(EntryRecord.Column.scope == scope)
+    }
+    if let key = key {
+      query = query.filter(EntryRecord.Column.key == key)
+    }
+    return DatabaseRegionObservation(tracking: query)
+      .publisher(in: databaseWriter)
+  }
+
   /// Writes multiple values to the database in a single transaction.
   /// - Parameter values: Mapping of keys/values to write to the database.
   /// - Parameter timestamp: The timestamp to associate with the updated values.

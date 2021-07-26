@@ -30,16 +30,7 @@ public final class UIKeyValueDocument: UIDocument {
     self.author = author
     self.keyValueCRDT = try KeyValueCRDT(fileURL: nil, author: author)
     super.init(fileURL: fileURL)
-    hasUnsavedChangesPipeline = try keyValueCRDT.readPublisher().sink(receiveCompletion: { completion in
-      switch completion {
-      case .failure(let error):
-        Logger.keyValueDocument.error("Unexpected error monitoring database: \(error)")
-      case .finished:
-        Logger.keyValueDocument.info("Monitoring pipeline shutting down")
-      }
-    }, receiveValue: { [weak self] _ in
-      self?.updateChangeCount(.done)
-    })
+    startMonitoringChanges()
   }
 
   /// The ``Author`` identifying changes made by this instance.
@@ -49,11 +40,7 @@ public final class UIKeyValueDocument: UIDocument {
   public let keyValueCRDT: KeyValueCRDT
 
   /// Pipeline for monitoring for unsaved changes to the in-memory database.
-  private var hasUnsavedChangesPipeline: AnyCancellable? {
-    willSet {
-      hasUnsavedChangesPipeline?.cancel()
-    }
-  }
+  private var hasUnsavedChangesPipeline: AnyCancellable?
 
   public override func open(completionHandler: ((Bool) -> Void)? = nil) {
     super.open { success in
@@ -72,13 +59,17 @@ public final class UIKeyValueDocument: UIDocument {
   public override func close(completionHandler: ((Bool) -> Void)? = nil) {
     // Remove-on-deinit doesn't apply to UIDocument, it seems to me. These have an explicit open/close lifecycle.
     Logger.keyValueDocument.info("Closing \(fileURL.path)")
-    hasUnsavedChangesPipeline = nil
+    stopMonitoringChanges()
     NotificationCenter.default.removeObserver(self) // swiftlint:disable:this notification_center_detachment
     super.close(completionHandler: completionHandler)
   }
 
   public override func read(from url: URL) throws {
     Logger.keyValueDocument.info("Reading from \(url.path)")
+    stopMonitoringChanges()
+    defer {
+      startMonitoringChanges()
+    }
     let onDiskDataQueue = try memoryDatabaseQueue(fileURL: url)
     let onDiskData = try KeyValueCRDT(databaseWriter: onDiskDataQueue, author: author)
     if try keyValueCRDT.dominates(other: onDiskData) {
@@ -123,7 +114,7 @@ private extension UIKeyValueDocument {
   /// - note: If fileURL does not exist, this method returns an empty database queue.
   /// - parameter fileURL: The file URL to read.
   /// - returns: An in-memory database queue with the contents of fileURL.
-  private func memoryDatabaseQueue(fileURL: URL) throws -> DatabaseQueue {
+  func memoryDatabaseQueue(fileURL: URL) throws -> DatabaseQueue {
     let coordinator = NSFileCoordinator(filePresenter: self)
     var coordinatorError: NSError?
     var result: Result<DatabaseQueue, Swift.Error>?
@@ -158,5 +149,28 @@ private extension UIKeyValueDocument {
     case .none:
       preconditionFailure()
     }
+  }
+
+  func startMonitoringChanges() {
+    do {
+      hasUnsavedChangesPipeline = try keyValueCRDT.didChangePublisher().sink(receiveCompletion: { completion in
+        switch completion {
+        case .failure(let error):
+          Logger.keyValueDocument.error("Unexpected error monitoring database: \(error)")
+        case .finished:
+          Logger.keyValueDocument.info("Monitoring pipeline shutting down")
+        }
+      }, receiveValue: { [weak self] _ in
+        self?.updateChangeCount(.done)
+      })
+    } catch {
+      Logger.keyValueDocument.error("Unable to monitor changes for \(fileURL) -- document updates will not save. \(error)")
+      assertionFailure()
+    }
+  }
+
+  func stopMonitoringChanges() {
+    hasUnsavedChangesPipeline?.cancel()
+    hasUnsavedChangesPipeline = nil
   }
 }
