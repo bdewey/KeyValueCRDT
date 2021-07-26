@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import GRDB
 
@@ -191,6 +192,27 @@ public final class KeyValueCRDT {
     return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
   }
 
+  /// Publishes changes to the values for any matching key.
+  /// - Parameters:
+  ///   - scope: If present, limits the results only to values in this scope.
+  ///   - key: If present, limits the results only to values with this key.
+  /// - Returns: A publisher of mappings of ``ScopedKey`` structs to ``Version`` arrays holding the values associated with the key.
+  public func readPublisher(scope: String? = nil, key: String? = nil) throws -> some Publisher {
+    var query = EntryRecord.all()
+    if let scope = scope {
+      query = query.filter(EntryRecord.Column.scope == scope)
+    }
+    if let key = key {
+      query = query.filter(EntryRecord.Column.key == key)
+    }
+    return ValueObservation
+      .tracking(query.fetchAll)
+      .map({ records in
+        Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+      })
+      .publisher(in: databaseWriter)
+  }
+
   /// Writes multiple values to the database in a single transaction.
   /// - Parameter values: Mapping of keys/values to write to the database.
   /// - Parameter timestamp: The timestamp to associate with the updated values.
@@ -226,6 +248,25 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
     }
   }
 
+  /// Returns true if the receiver "dominates" `other`.
+  ///
+  /// A CRDT **A** dominates a CRDT **B** if, for all keys in **B**, **A** has a version that is greater than or equal to that version.
+  /// In other words, there is nothing in **B** that **A** does not already know about.
+  ///
+  /// One implication of this definition is a CRDT dominates itself... `crdt.dominates(other: crdt)` is always true.
+  ///
+  /// - parameter other: The CRDT to compare to.
+  /// - returns: True if the receiver dominates `other`
+  public func dominates(other: KeyValueCRDT) throws -> Bool {
+    try databaseWriter.read { localDB in
+      let localVersion = VersionVector(try AuthorRecord.fetchAll(localDB))
+      let remoteVersion = try other.databaseWriter.read { remoteDB in
+        VersionVector(try AuthorRecord.fetchAll(remoteDB))
+      }
+      return localVersion.dominates(remoteVersion)
+    }
+  }
+
   /// Merge another ``KeyValueCRDT`` into the receiver.
   public func merge(source: KeyValueCRDT) throws {
     try databaseWriter.write { localDB in
@@ -245,6 +286,22 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
         try record.save(localDB)
         try garbageCollectTombstones(for: record, in: localDB)
       }
+    }
+  }
+
+  /// Backs up this CRDT to another CRDT.
+  ///
+  /// The expectation is `destination` is empty; any contents it has will be overwritten.
+  public func backup(to destination: KeyValueCRDT) throws {
+    try databaseWriter.backup(to: destination.databaseWriter)
+  }
+
+  /// Writes the contents of the CRDT to a file.
+  ///
+  /// The intended use is to write the contents of an in-memory CRDT to disk.
+  public func save(to url: URL) throws {
+    try databaseWriter.writeWithoutTransaction { db in
+      try db.execute(sql: "VACUUM INTO '\(url.path)'")
     }
   }
 }

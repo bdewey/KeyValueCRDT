@@ -38,7 +38,14 @@ final class KeyValueCRDTTests: XCTestCase {
     try bob.writeText("bob", to: TestKey.bob)
     try bob.writeText("bob shared", to: TestKey.shared)
 
+    // Neither copy dominates the other -- they each have changes the other needs to see
+    XCTAssertFalse(try alice.dominates(other: bob))
+    XCTAssertFalse(try bob.dominates(other: alice))
     try alice.merge(source: bob)
+
+    // Post-merge, Alice dominates bob but not vice-versa
+    XCTAssertTrue(try alice.dominates(other: bob))
+    XCTAssertFalse(try bob.dominates(other: alice))
     XCTAssertEqual(try alice.read(key: TestKey.alice).text, "alice")
     XCTAssertEqual(try alice.read(key: TestKey.bob).text, "bob")
     XCTAssertEqual(try alice.read(key: TestKey.shared).count, 2)
@@ -245,6 +252,37 @@ final class KeyValueCRDTTests: XCTestCase {
     XCTAssertEqual(try crdt.statistics.entryCount, 2)
     XCTAssertEqual(try crdt.read(key: TestKey.alice).text, "Alice")
     XCTAssertEqual(try crdt.read(key: TestKey.shared).json, "42")
+  }
+
+  func testBackup() throws {
+    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let values: [ScopedKey: Value] = [
+      ScopedKey(key: TestKey.alice): .text("Alice"),
+      ScopedKey(key: TestKey.shared): .json("42"),
+    ]
+    try crdt.bulkWrite(values)
+    let backup = try KeyValueCRDT(fileURL: nil, author: .bob)
+    try crdt.backup(to: backup)
+    XCTAssertTrue(try crdt.dominates(other: backup))
+    XCTAssertTrue(try backup.dominates(other: crdt))
+  }
+
+  func testBackupClobbersExistingData() throws {
+    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let values: [ScopedKey: Value] = [
+      ScopedKey(key: TestKey.alice): .text("Alice"),
+      ScopedKey(key: TestKey.shared): .json("42"),
+    ]
+    try crdt.bulkWrite(values)
+    let backup = try KeyValueCRDT(fileURL: nil, author: .bob)
+    try backup.writeText("Hi bob", to: TestKey.bob)
+    XCTAssertFalse(try crdt.dominates(other: backup))
+    XCTAssertFalse(try backup.dominates(other: crdt))
+    try crdt.backup(to: backup)
+    XCTAssertTrue(try crdt.dominates(other: backup))
+    XCTAssertTrue(try backup.dominates(other: crdt))
+    XCTAssertEqual(try backup.read(key: TestKey.shared).json, "42")
+    XCTAssertEqual(try backup.read(key: TestKey.bob).count, 0)
   }
 }
 
