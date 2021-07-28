@@ -11,6 +11,13 @@ private extension Logger {
   }()
 }
 
+public protocol UIKeyValueDocumentDelegate: AnyObject {
+  /// Called before using ``KeyValueCRDT/KeyValueCRDT/merge(source:)`` to merge **conflicting** copies of the CRDT.
+  ///
+  /// This is a useful hook for making backup copies of the CRDT in case something goes wrong!
+  func keyValueDocument(_ document: UIKeyValueDocument, willMergeCRDT sourceCRDT: KeyValueCRDT, into destinationCRDT: KeyValueCRDT)
+}
+
 /// A UIDocument subclass that provides access to a key-value CRDT database.
 ///
 /// Because it is a `UIDocument` subclass, it interoperates with the iOS mechanisms for coordinating access to files via `NSFileCoordinator` and `NSFilePresenter`.
@@ -32,6 +39,8 @@ public final class UIKeyValueDocument: UIDocument {
     super.init(fileURL: fileURL)
     startMonitoringChanges()
   }
+
+  public weak var delegate: UIKeyValueDocumentDelegate?
 
   /// The ``Author`` identifying changes made by this instance.
   public let author: Author
@@ -83,6 +92,7 @@ public final class UIKeyValueDocument: UIDocument {
     }
     // Neither dominate. Merge disk contents into memory.
     Logger.keyValueDocument.info("Merging contents of \(url.path) with in-memory data")
+    delegate?.keyValueDocument(self, willMergeCRDT: onDiskData, into: keyValueCRDT)
     try keyValueCRDT.merge(source: onDiskData)
   }
 
@@ -107,7 +117,26 @@ private extension UIKeyValueDocument {
       return
     }
     Logger.keyValueDocument.info("Handling conflict")
-    assertionFailure("Not implemented")
+    do {
+      for conflictVersion in NSFileVersion.unresolvedConflictVersionsOfItem(at: fileURL) ?? [] {
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("kvcrdt")
+        try conflictVersion.replaceItem(at: tempURL, options: [])
+        defer {
+          try? FileManager.default.removeItem(at: tempURL)
+        }
+        let conflictQueue = try memoryDatabaseQueue(fileURL: tempURL)
+        let conflictCRDT = try KeyValueCRDT(databaseWriter: conflictQueue, author: author)
+        delegate?.keyValueDocument(self, willMergeCRDT: conflictCRDT, into: keyValueCRDT)
+        try keyValueCRDT.merge(source: conflictCRDT)
+        Logger.keyValueDocument.info("UIDocument: Merged conflict version: \(conflictVersion)")
+        conflictVersion.isResolved = true
+        try conflictVersion.remove()
+      }
+      Logger.keyValueDocument.info("UIDocument: Finished resolving conflicts")
+      try NSFileVersion.removeOtherVersionsOfItem(at: fileURL)
+    } catch {
+      Logger.keyValueDocument.error("UIDocument: Unexpected error resolving conflict: \(error)")
+    }
   }
 
   /// Creates an in-memory database queue for the contents of the file at `fileURL`
