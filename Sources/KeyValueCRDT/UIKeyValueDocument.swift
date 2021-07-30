@@ -1,3 +1,5 @@
+#if os(iOS)
+
 import Combine
 import GRDB
 import Logging
@@ -203,3 +205,5 @@ private extension UIKeyValueDocument {
     hasUnsavedChangesPipeline = nil
   }
 }
+
+#endif
