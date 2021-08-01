@@ -28,7 +28,7 @@ struct Statistics: ParsableCommand {
     guard let fileURL = URL(string: inputOptions.inputFileName) else {
       throw KVCRDTError.invalidFile
     }
-    let crdt = try KeyValueCRDT(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
+    let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
     let stats = try crdt.statistics
     let output = """
 Entries:    \(stats.entryCount)
@@ -50,7 +50,7 @@ struct List: ParsableCommand {
     guard let fileURL = URL(string: input.inputFileName) else {
       throw KVCRDTError.invalidFile
     }
-    let crdt = try KeyValueCRDT(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
+    let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
     let scopedKeys = try crdt.keys(scope: scope, key: key)
     let table = Table<ScopedKey>(columns: [
       Table.Column(name: "Scope", formatter: { $0.scope }),
@@ -71,7 +71,7 @@ struct Get: ParsableCommand {
     guard let fileURL = URL(string: input.inputFileName) else {
       throw KVCRDTError.invalidFile
     }
-    let crdt = try KeyValueCRDT(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
+    let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
     let versions = try crdt.read(key: key, scope: scope)
     let showHeader = versions.count > 1
     for version in versions {

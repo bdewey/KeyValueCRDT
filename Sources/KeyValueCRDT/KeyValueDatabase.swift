@@ -4,20 +4,20 @@ import GRDB
 
 /// Implements a key/value CRDT backed by a single sqlite database.
 ///
-/// `KeyValueCRDT` provides a *scoped* key/value storage backed by a single sqlite database. The database is a *conflict-free replicated data type* (CRDT), meaning
-/// that multiple *authors* can edit copies of the database and later *merge* their changes and get consistent results. This makes `KeyValueCRDT` a good file format
+/// `KeyValueDatabase` provides a *scoped* key/value storage backed by a single sqlite database. The database is a *conflict-free replicated data type* (CRDT), meaning
+/// that multiple *authors* can edit copies of the database and later *merge* their changes and get consistent results. This makes `KeyValueDatabase` a good file format
 /// for files in cloud storage, such as iCloud Documents. Different devices can make changes while offline and reliably merge their changes with the cloud version of the document.
 ///
-/// `KeyValueCRDT` provides *multi-value register* semantics for the key/value pairs stored in the database. This means:
+/// `KeyValueDatabase` provides *multi-value register* semantics for the key/value pairs stored in the database. This means:
 ///
 /// * An author can *write* a single value for a key.
 /// * However, when *reading* a key, you may get multiple values. This happens when multiple authors make conflicting changes to a key -- the database keeps all of the conflicting
-/// updates. Any author can resolve the conflict using an appropriate algorithm and writing the resolved value back to the database. `KeyValueCRDT` does not resolve any
+/// updates. Any author can resolve the conflict using an appropriate algorithm and writing the resolved value back to the database. `KeyValueDatabase` does not resolve any
 /// conflicts on its own.
 ///
-/// `KeyValueCRDT` provides *scoped* key/value storage. A *scope* is an arbitrary string that serves as a container for key/value pairs. The empty string is a valid scope
+/// `KeyValueDatabase` provides *scoped* key/value storage. A *scope* is an arbitrary string that serves as a container for key/value pairs. The empty string is a valid scope
 /// and is the default scope for key/value pairs.
-public final class KeyValueCRDT {
+public final class KeyValueDatabase {
   /// Initializes a CRDT using a specific file.
   /// - Parameters:
   ///   - fileURL: The file holding the key/value CRDT.
@@ -274,7 +274,7 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
   ///
   /// - parameter other: The CRDT to compare to.
   /// - returns: True if the receiver dominates `other`
-  public func dominates(other: KeyValueCRDT) throws -> Bool {
+  public func dominates(other: KeyValueDatabase) throws -> Bool {
     try databaseWriter.read { localDB in
       let localVersion = VersionVector(try AuthorRecord.fetchAll(localDB))
       let remoteVersion = try other.databaseWriter.read { remoteDB in
@@ -285,7 +285,7 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
   }
 
   /// Merge another ``KeyValueCRDT`` into the receiver.
-  public func merge(source: KeyValueCRDT) throws {
+  public func merge(source: KeyValueDatabase) throws {
     try databaseWriter.write { localDB in
       var localVersion = VersionVector(try AuthorRecord.fetchAll(localDB))
 
@@ -309,7 +309,7 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
   /// Backs up this CRDT to another CRDT.
   ///
   /// The expectation is `destination` is empty; any contents it has will be overwritten.
-  public func backup(to destination: KeyValueCRDT) throws {
+  public func backup(to destination: KeyValueDatabase) throws {
     try databaseWriter.backup(to: destination.databaseWriter)
   }
 
@@ -325,7 +325,7 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
 
 // MARK: - Private
 
-private extension KeyValueCRDT {
+private extension KeyValueDatabase {
   struct RemoteInfo {
     let version: VersionVector<AuthorVersionIdentifier, Int>
     let entries: [EntryRecord]

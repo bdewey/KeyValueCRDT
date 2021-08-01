@@ -4,7 +4,7 @@ import XCTest
 
 final class KeyValueCRDTTests: XCTestCase {
   func testSimpleStorage() throws {
-    let crdt = try KeyValueCRDT(fileURL: nil, author: Author(id: UUID(), name: "test"))
+    let crdt = try KeyValueDatabase(fileURL: nil, author: Author(id: UUID(), name: "test"))
     try crdt.writeText("Hello, world!", to: "key")
     let result = try crdt.read(key: "key")
     XCTAssertEqual(result.count, 1)
@@ -12,7 +12,7 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testMultipleWritesFromOneAuthorMakeOneVersion() throws {
-    let crdt = try KeyValueCRDT(fileURL: nil, author: Author(id: UUID(), name: "test"))
+    let crdt = try KeyValueDatabase(fileURL: nil, author: Author(id: UUID(), name: "test"))
     try crdt.writeText("Hello, world!", to: "key")
     try crdt.writeText("Goodbye, world!", to: "key")
     let result = try crdt.read(key: "key")
@@ -21,7 +21,7 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testDelete() throws {
-    let crdt = try KeyValueCRDT(fileURL: nil, author: Author(id: UUID(), name: "test"))
+    let crdt = try KeyValueDatabase(fileURL: nil, author: Author(id: UUID(), name: "test"))
     try crdt.writeText("Hello, world!", to: "key")
     try crdt.delete(key: "key")
     let result = try crdt.read(key: "key")
@@ -29,8 +29,8 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testMerge() throws {
-    let alice = try KeyValueCRDT(fileURL: nil, author: .alice)
-    let bob = try KeyValueCRDT(fileURL: nil, author: .bob)
+    let alice = try KeyValueDatabase(fileURL: nil, author: .alice)
+    let bob = try KeyValueDatabase(fileURL: nil, author: .bob)
 
     try alice.writeText("alice", to: TestKey.alice)
     try alice.writeText("alice shared", to: TestKey.shared)
@@ -59,9 +59,9 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testMergeDoesNotAllowTimeTravel() throws {
-    let original = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let original = try KeyValueDatabase(fileURL: nil, author: .alice)
     try original.writeText("Version 1", to: "test")
-    let modified = try KeyValueCRDT(databaseWriter: try original.makeMemoryDatabaseQueue(), author: .alice)
+    let modified = try KeyValueDatabase(databaseWriter: try original.makeMemoryDatabaseQueue(), author: .alice)
     try modified.writeText("Version 2", to: "test")
 
     // Changing `modified` doesn't change `original`
@@ -75,9 +75,9 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testMergeWillMoveForwardInTime() throws {
-    let original = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let original = try KeyValueDatabase(fileURL: nil, author: .alice)
     try original.writeText("Version 1", to: "test")
-    let modified = try KeyValueCRDT(databaseWriter: try original.makeMemoryDatabaseQueue(), author: .alice)
+    let modified = try KeyValueDatabase(databaseWriter: try original.makeMemoryDatabaseQueue(), author: .alice)
     try modified.writeText("Version 2", to: "test")
 
     // Changing `modified` doesn't change `original`
@@ -90,9 +90,9 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testMergeUpdatesAuthorRecord() throws {
-    let original = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let original = try KeyValueDatabase(fileURL: nil, author: .alice)
     try original.writeText("Version 1", to: "test")
-    let modified = try KeyValueCRDT(databaseWriter: try original.makeMemoryDatabaseQueue(), author: .alice)
+    let modified = try KeyValueDatabase(databaseWriter: try original.makeMemoryDatabaseQueue(), author: .alice)
     for i in 2 ... 100 {
       try modified.writeText("Version \(i)", to: "test")
     }
@@ -115,8 +115,8 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testCreateDeleteUpdates() throws {
-    let alice = try KeyValueCRDT(fileURL: nil, author: .alice)
-    let bob = try KeyValueCRDT(fileURL: nil, author: .bob)
+    let alice = try KeyValueDatabase(fileURL: nil, author: .alice)
+    let bob = try KeyValueDatabase(fileURL: nil, author: .bob)
     try alice.writeText("v1", to: "test")
     try bob.merge(source: alice)
     XCTAssertEqual(try bob.read(key: "test").text, "v1")
@@ -127,8 +127,8 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testCreateDeleteConflict() throws {
-    let alice = try KeyValueCRDT(fileURL: nil, author: .alice)
-    let bob = try KeyValueCRDT(fileURL: nil, author: .bob)
+    let alice = try KeyValueDatabase(fileURL: nil, author: .alice)
+    let bob = try KeyValueDatabase(fileURL: nil, author: .bob)
     try alice.writeText("v1", to: "test")
     try bob.merge(source: alice)
     XCTAssertEqual(try bob.read(key: "test").text, "v1")
@@ -149,8 +149,8 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testDeletedKeysDontShowUp() throws {
-    let alice = try KeyValueCRDT(fileURL: nil, author: .alice)
-    let bob = try KeyValueCRDT(fileURL: nil, author: .bob)
+    let alice = try KeyValueDatabase(fileURL: nil, author: .alice)
+    let bob = try KeyValueDatabase(fileURL: nil, author: .bob)
     try alice.writeText("v1", to: "test")
     try bob.merge(source: alice)
     XCTAssertEqual(try bob.read(key: "test").text, "v1")
@@ -172,7 +172,7 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testKeyScopingWorks() throws {
-    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let crdt = try KeyValueDatabase(fileURL: nil, author: .alice)
     try crdt.writeText("scope 1", to: "test", scope: "scope 1")
     try crdt.writeText("scope 2", to: "test", scope: "scope 2")
     XCTAssertEqual(try crdt.keys.count, 2)
@@ -192,20 +192,20 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testSearch() throws {
-    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let crdt = try KeyValueDatabase(fileURL: nil, author: .alice)
     try crdt.writeText("Four score and seven years ago", to: "gettysburg")
     try crdt.writeText("Shall I compare thee to a summer's day?", to: "shakespeare")
     XCTAssertEqual([ScopedKey(key: "shakespeare")], try crdt.searchText(for: "summer"))
   }
 
   func testStoreJSON() throws {
-    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let crdt = try KeyValueDatabase(fileURL: nil, author: .alice)
     try crdt.writeJson(#"{"a": 21}"#, to: "json")
     XCTAssertEqual(#"{"a": 21}"#, try crdt.read(key: "json").json)
   }
 
   func testInvalidJSONThrows() throws {
-    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let crdt = try KeyValueDatabase(fileURL: nil, author: .alice)
     XCTAssertThrowsError(try crdt.writeJson("This isn't JSON", to: "not json"), "This is a mistake") { error in
       XCTAssert(error is KeyValueCRDTError)
       if let error = error as? KeyValueCRDTError {
@@ -215,15 +215,15 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testStoreBlob() throws {
-    let crdt = try KeyValueCRDT(fileURL: nil, author: .bob)
+    let crdt = try KeyValueDatabase(fileURL: nil, author: .bob)
     let data = "Hello, world!".data(using: .utf8)!
     try crdt.writeBlob(data, to: "test")
     XCTAssertEqual(data, try crdt.read(key: "test").blob)
   }
 
   func testBulkRead() throws {
-    let alice = try KeyValueCRDT(fileURL: nil, author: .alice)
-    let bob = try KeyValueCRDT(fileURL: nil, author: .bob)
+    let alice = try KeyValueDatabase(fileURL: nil, author: .alice)
+    let bob = try KeyValueDatabase(fileURL: nil, author: .bob)
 
     try alice.writeText("alice", to: TestKey.alice)
     try alice.writeText("alice shared", to: TestKey.shared)
@@ -243,7 +243,7 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testBulkWrite() throws {
-    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let crdt = try KeyValueDatabase(fileURL: nil, author: .alice)
     let values: [ScopedKey: Value] = [
       ScopedKey(key: TestKey.alice): .text("Alice"),
       ScopedKey(key: TestKey.shared): .json("42"),
@@ -255,26 +255,26 @@ final class KeyValueCRDTTests: XCTestCase {
   }
 
   func testBackup() throws {
-    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let crdt = try KeyValueDatabase(fileURL: nil, author: .alice)
     let values: [ScopedKey: Value] = [
       ScopedKey(key: TestKey.alice): .text("Alice"),
       ScopedKey(key: TestKey.shared): .json("42"),
     ]
     try crdt.bulkWrite(values)
-    let backup = try KeyValueCRDT(fileURL: nil, author: .bob)
+    let backup = try KeyValueDatabase(fileURL: nil, author: .bob)
     try crdt.backup(to: backup)
     XCTAssertTrue(try crdt.dominates(other: backup))
     XCTAssertTrue(try backup.dominates(other: crdt))
   }
 
   func testBackupClobbersExistingData() throws {
-    let crdt = try KeyValueCRDT(fileURL: nil, author: .alice)
+    let crdt = try KeyValueDatabase(fileURL: nil, author: .alice)
     let values: [ScopedKey: Value] = [
       ScopedKey(key: TestKey.alice): .text("Alice"),
       ScopedKey(key: TestKey.shared): .json("42"),
     ]
     try crdt.bulkWrite(values)
-    let backup = try KeyValueCRDT(fileURL: nil, author: .bob)
+    let backup = try KeyValueDatabase(fileURL: nil, author: .bob)
     try backup.writeText("Hi bob", to: TestKey.bob)
     XCTAssertFalse(try crdt.dominates(other: backup))
     XCTAssertFalse(try backup.dominates(other: crdt))

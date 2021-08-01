@@ -14,10 +14,10 @@ private extension Logger {
 }
 
 public protocol UIKeyValueDocumentDelegate: AnyObject {
-  /// Called before using ``KeyValueCRDT/KeyValueCRDT/merge(source:)`` to merge **conflicting** copies of the CRDT.
+  /// Called before using ``KeyValueCRDT/KeyValueDatabase/merge(source:)`` to merge **conflicting** copies of the CRDT.
   ///
   /// This is a useful hook for making backup copies of the CRDT in case something goes wrong!
-  func keyValueDocument(_ document: UIKeyValueDocument, willMergeCRDT sourceCRDT: KeyValueCRDT, into destinationCRDT: KeyValueCRDT)
+  func keyValueDocument(_ document: UIKeyValueDocument, willMergeCRDT sourceCRDT: KeyValueDatabase, into destinationCRDT: KeyValueDatabase)
 }
 
 /// A UIDocument subclass that provides access to a key-value CRDT database.
@@ -28,8 +28,8 @@ public protocol UIKeyValueDocumentDelegate: AnyObject {
 /// In iOS, successfully working with services like iCloud involves careful coordination of I/O with other services, and natively sqlite does not know how to do this.
 /// Therefore, `UIKeyValueDocument` reads the entire database into memory, works on the in-memory copy, and writes the entire database to disk when it needs to
 /// coordinate with other proceses. Therefore, you should exclusively use `UIKeyValueDocument` for "document-sized" purposes, where reading/writing the entire
-/// document is feasible. If you do not want to read the entire contents of a key/value CRDT into memory at once, you should work directly with ``KeyValueCRDT``.
-/// ``KeyValueCRDT`` loads data on-demand but does not interoperate with the document replication mechanisms in iOS.
+/// document is feasible. If you do not want to read the entire contents of a key/value CRDT into memory at once, you should work directly with ``KeyValueDatabase``.
+/// ``KeyValueDatabase`` loads data on-demand but does not interoperate with the document replication mechanisms in iOS.
 public final class UIKeyValueDocument: UIDocument {
   /// Designated initializer.
   ///
@@ -37,7 +37,7 @@ public final class UIKeyValueDocument: UIDocument {
   /// - parameter author: An ``Author`` struct that identifies all changes made by this instance.
   public init(fileURL: URL, author: Author) throws {
     self.author = author
-    self.keyValueCRDT = try KeyValueCRDT(fileURL: nil, author: author)
+    self.keyValueCRDT = try KeyValueDatabase(fileURL: nil, author: author)
     super.init(fileURL: fileURL)
     startMonitoringChanges()
   }
@@ -48,7 +48,7 @@ public final class UIKeyValueDocument: UIDocument {
   public let author: Author
 
   /// The key-value CRDT stored in the document.
-  public let keyValueCRDT: KeyValueCRDT
+  public let keyValueCRDT: KeyValueDatabase
 
   /// Pipeline for monitoring for unsaved changes to the in-memory database.
   private var hasUnsavedChangesPipeline: AnyCancellable?
@@ -82,7 +82,7 @@ public final class UIKeyValueDocument: UIDocument {
       startMonitoringChanges()
     }
     let onDiskDataQueue = try memoryDatabaseQueue(fileURL: url)
-    let onDiskData = try KeyValueCRDT(databaseWriter: onDiskDataQueue, author: author)
+    let onDiskData = try KeyValueDatabase(databaseWriter: onDiskDataQueue, author: author)
     if try keyValueCRDT.dominates(other: onDiskData) {
       Logger.keyValueDocument.info("Ignoring read from \(url.path) because it contains no new information")
       return
@@ -127,7 +127,7 @@ private extension UIKeyValueDocument {
           try? FileManager.default.removeItem(at: tempURL)
         }
         let conflictQueue = try memoryDatabaseQueue(fileURL: tempURL)
-        let conflictCRDT = try KeyValueCRDT(databaseWriter: conflictQueue, author: author)
+        let conflictCRDT = try KeyValueDatabase(databaseWriter: conflictQueue, author: author)
         delegate?.keyValueDocument(self, willMergeCRDT: conflictCRDT, into: keyValueCRDT)
         try keyValueCRDT.merge(source: conflictCRDT)
         Logger.keyValueDocument.info("UIDocument: Merged conflict version: \(conflictVersion)")
