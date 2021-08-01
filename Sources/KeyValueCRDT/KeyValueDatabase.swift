@@ -197,7 +197,7 @@ public final class KeyValueDatabase {
   ///   - scope: If present, limits the results only to values in this scope.
   ///   - key: If present, limits the results only to values with this key.
   /// - Returns: A publisher of mappings of ``ScopedKey`` structs to ``Version`` arrays holding the values associated with the key.
-  public func readPublisher(scope: String? = nil, key: String? = nil) throws -> some Publisher {
+  public func readPublisher(scope: String? = nil, key: String? = nil) -> AnyPublisher<[ScopedKey: [Version]], Error> {
     var query = EntryRecord.all()
     if let scope = scope {
       query = query.filter(EntryRecord.Column.scope == scope)
@@ -211,6 +211,7 @@ public final class KeyValueDatabase {
         Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
       })
       .publisher(in: databaseWriter)
+      .eraseToAnyPublisher()
   }
 
   /// Publishes a notification whenever there are changes to matching keys.
@@ -218,7 +219,7 @@ public final class KeyValueDatabase {
   ///   - scope: If present, limits the results only to values in this scope.
   ///   - key: If present, limits the results only to values with this key.
   /// - Returns: A publisher of mappings of ``ScopedKey`` structs to ``Version`` arrays holding the values associated with the key.
-  public func didChangePublisher(scope: String? = nil, key: String? = nil) throws -> some Publisher {
+  public func didChangePublisher(scope: String? = nil, key: String? = nil) -> AnyPublisher<Database, Error> {
     var query = EntryRecord.all()
     if let scope = scope {
       query = query.filter(EntryRecord.Column.scope == scope)
@@ -228,6 +229,7 @@ public final class KeyValueDatabase {
     }
     return DatabaseRegionObservation(tracking: query)
       .publisher(in: databaseWriter)
+      .eraseToAnyPublisher()
   }
 
   /// Writes multiple values to the database in a single transaction.
