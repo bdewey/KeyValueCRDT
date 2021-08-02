@@ -199,6 +199,20 @@ public final class KeyValueDatabase {
     return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
   }
 
+  public func bulkRead(isIncluded: (String, String) -> Bool) throws -> [ScopedKey: [Version]] {
+    let records = try databaseWriter.read { db -> [EntryRecord] in
+      let recordCursor = try EntryRecord.fetchCursor(db)
+      var records = [EntryRecord]()
+      while let record = try recordCursor.next() {
+        if isIncluded(record.scope, record.key) {
+          records.append(record)
+        }
+      }
+      return records
+    }
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+  }
+
   /// Publishes changes to the values for any matching key.
   /// - Parameters:
   ///   - scope: If present, limits the results only to values in this scope.
