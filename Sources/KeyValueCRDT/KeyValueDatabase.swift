@@ -192,6 +192,13 @@ public final class KeyValueDatabase {
     return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
   }
 
+  public func bulkReadAllScopes(keyPrefix: String) throws -> [ScopedKey: [Version]] {
+    let records = try databaseWriter.read { db in
+      try EntryRecord.filter(EntryRecord.Column.key.like("\(keyPrefix)%")).fetchAll(db)
+    }
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+  }
+
   /// Publishes changes to the values for any matching key.
   /// - Parameters:
   ///   - scope: If present, limits the results only to values in this scope.

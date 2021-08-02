@@ -183,21 +183,17 @@ private extension UIKeyValueDocument {
   }
 
   func startMonitoringChanges() {
-    do {
-      hasUnsavedChangesPipeline = try keyValueCRDT.didChangePublisher().sink(receiveCompletion: { completion in
-        switch completion {
-        case .failure(let error):
-          Logger.keyValueDocument.error("Unexpected error monitoring database: \(error)")
-        case .finished:
-          Logger.keyValueDocument.info("Monitoring pipeline shutting down")
-        }
-      }, receiveValue: { [weak self] _ in
-        self?.updateChangeCount(.done)
-      })
-    } catch {
-      Logger.keyValueDocument.error("Unable to monitor changes for \(fileURL) -- document updates will not save. \(error)")
-      assertionFailure()
-    }
+    hasUnsavedChangesPipeline = keyValueCRDT.didChangePublisher().sink(receiveCompletion: { completion in
+      switch completion {
+      case .failure(let error):
+        Logger.keyValueDocument.error("Unexpected error monitoring database: \(error)")
+        assertionFailure()
+      case .finished:
+        Logger.keyValueDocument.info("Monitoring pipeline shutting down")
+      }
+    }, receiveValue: { [weak self] _ in
+      self?.updateChangeCount(.done)
+    })
   }
 
   func stopMonitoringChanges() {
