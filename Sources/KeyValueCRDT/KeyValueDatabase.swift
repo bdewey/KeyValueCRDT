@@ -199,6 +199,16 @@ public final class KeyValueDatabase {
     return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
   }
 
+  public func bulkRead(keys: [String]) throws -> [ScopedKey: [Version]] {
+    let records = try databaseWriter.read { db -> [EntryRecord] in
+      let keyList = keys
+        .map({ "'\($0)'" }) // Wrap each string in double quotes
+        .joined(separator: ", ") // comma separate
+      return try EntryRecord.filter(sql: "key IN (\(keyList))").fetchAll(db)
+    }
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+  }
+
   public func bulkRead(isIncluded: (String, String) -> Bool) throws -> [ScopedKey: [Version]] {
     let records = try databaseWriter.read { db -> [EntryRecord] in
       let recordCursor = try EntryRecord.fetchCursor(db)
