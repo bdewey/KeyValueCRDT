@@ -24,10 +24,10 @@ internal extension DatabaseMigrator {
         td.column("blob", .blob)
       })
       // TODO: Get FTS5 working!
-      try db.create(virtualTable: "entryFullText", using: FTS4()) { table in
+      try db.create(virtualTable: "entryFullText", using: FTS5()) { table in
         table.synchronize(withTable: "entry")
         table.column("text")
-        table.tokenizer = .porter
+        table.tokenizer = .porter(wrapping: .unicode61())
       }
       try db.create(table: "tombstone", body: { td in
         td.column("scope", .text).notNull()

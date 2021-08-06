@@ -342,7 +342,7 @@ public final class KeyValueDatabase {
 
   /// Searches all text values for `searchTerm` and returns the matching keys.
   public func searchText(for searchTerm: String) throws -> [ScopedKey] {
-    let pattern = FTS3Pattern(matchingAllTokensIn: searchTerm)
+    let pattern = FTS5Pattern(matchingAllTokensIn: searchTerm)
     let sql = """
 SELECT entry.scope, entry.key
 FROM entry
