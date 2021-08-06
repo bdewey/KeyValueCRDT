@@ -25,7 +25,7 @@ public final class KeyValueDatabase {
   public convenience init(fileURL: URL?, author: Author) throws {
     let databaseWriter: DatabaseWriter
     if let fileURL = fileURL {
-      databaseWriter = try DatabasePool.openSharedDatabase(at: fileURL)
+      databaseWriter = try DatabaseQueue.openSharedDatabase(at: fileURL)
     } else {
       let queue = try DatabaseQueue(path: ":memory:")
       databaseWriter = queue
