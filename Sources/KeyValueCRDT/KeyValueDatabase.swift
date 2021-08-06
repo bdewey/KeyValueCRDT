@@ -268,6 +268,18 @@ public final class KeyValueDatabase {
     if let key = key {
       query = query.filter(EntryRecord.Column.key == key)
     }
+    return publisher(for: query)
+  }
+
+  /// Publishes changes for any key starting with a given prefix.
+  /// - Parameter keyPrefix: The prefix for matching keys.
+  /// - Returns: A publisher of mappings of ``ScopedKey`` structs to ``Version`` arrays holding values associated with the key.
+  public func readPublisher(keyPrefix: String) -> AnyPublisher<[ScopedKey: [Version]], Error> {
+    let query = EntryRecord.filter(EntryRecord.Column.key.like("\(keyPrefix)%"))
+    return publisher(for: query)
+  }
+
+  private func publisher(for query: QueryInterfaceRequest<EntryRecord>) -> AnyPublisher<[ScopedKey: [Version]], Error> {
     return ValueObservation
       .tracking(query.fetchAll)
       .map({ records in
