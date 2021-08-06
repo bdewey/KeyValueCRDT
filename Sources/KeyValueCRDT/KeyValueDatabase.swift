@@ -77,6 +77,20 @@ public final class KeyValueDatabase {
     }
   }
 
+  /// Read data from the database inside a transaction.
+  public func read<T>(block: (Database) throws -> T) throws -> T {
+    try databaseWriter.read { db in
+      try block(db)
+    }
+  }
+
+  /// Perform a sequence of operations that change the database inside a transaction.
+  public func write(block: (Database) throws -> Void) throws {
+    try databaseWriter.write { db in
+      try block(db)
+    }
+  }
+
   /// All keys currently used in the database.
   public var keys: [ScopedKey] {
     get throws {
@@ -179,6 +193,18 @@ public final class KeyValueDatabase {
   ///   - key: If present, limits the results only to values with this key.
   /// - Returns: A mapping of ``ScopedKey`` structs to ``Version`` arrays holding the values associated with the key. If there was an update conflict for the key, the ``Version`` array will contain more than one entry.
   public func bulkRead(scope: String? = nil, key: String? = nil) throws -> [ScopedKey: [Version]] {
+    try databaseWriter.read { db in
+      try bulkRead(database: db, scope: scope, key: key)
+    }
+  }
+
+  /// Returns the values for all matching keys.
+  /// - Parameters:
+  ///   - database: A database obtained either through ``read(block:)`` or ``write(block:)``
+  ///   - scope: If present, limits the results only to values in this scope.
+  ///   - key: If present, limits the results only to values with this key.
+  /// - Returns: A mapping of ``ScopedKey`` structs to ``Version`` arrays holding the values associated with the key. If there was an update conflict for the key, the ``Version`` array will contain more than one entry.
+  public func bulkRead(database: Database, scope: String? = nil, key: String? = nil) throws -> [ScopedKey: [Version]] {
     var query = EntryRecord.all()
     if let scope = scope {
       query = query.filter(EntryRecord.Column.scope == scope)
@@ -186,9 +212,7 @@ public final class KeyValueDatabase {
     if let key = key {
       query = query.filter(EntryRecord.Column.key == key)
     }
-    let records = try databaseWriter.read { db in
-      try query.fetchAll(db)
-    }
+    let records = try query.fetchAll(database)
     return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
   }
 
@@ -210,15 +234,23 @@ public final class KeyValueDatabase {
   }
 
   public func bulkRead(isIncluded: (String, String) -> Bool) throws -> [ScopedKey: [Version]] {
-    let records = try databaseWriter.read { db -> [EntryRecord] in
-      let recordCursor = try EntryRecord.fetchCursor(db)
-      var records = [EntryRecord]()
-      while let record = try recordCursor.next() {
-        if isIncluded(record.scope, record.key) {
-          records.append(record)
-        }
+    try databaseWriter.read { db in
+      try bulkRead(database: db, isIncluded: isIncluded)
+    }
+  }
+
+  /// Read data from the database.
+  /// - Parameters:
+  ///   - database: A `Database` object obtained from ``read(block:)`` or ``write(block:)``
+  ///   - isIncluded: A block that receives the key and scope associated with an entry and returns `true` if the entry should be in the result.
+  /// - Returns: A dictionary mapping entry scopes/keys with their values.
+  public func bulkRead(database: Database, isIncluded: (String, String) -> Bool) throws -> [ScopedKey: [Version]] {
+    let recordCursor = try EntryRecord.fetchCursor(database)
+    var records = [EntryRecord]()
+    while let record = try recordCursor.next() {
+      if isIncluded(record.scope, record.key) {
+        records.append(record)
       }
-      return records
     }
     return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
   }
@@ -272,6 +304,18 @@ public final class KeyValueDatabase {
       for (key, value) in values {
         try writeValue(value, to: key.key, scope: key.scope, timestamp: timestamp, in: db, usn: usn)
       }
+    }
+  }
+
+  /// Writes multiple values to the database in a single transaction.
+  /// - Parameters:
+  ///   - database: A database obtained by ``write(block:)``
+  ///   - values: Mapping of keys/values to write to the database.
+  ///   - timestamp: The timestamp to associate with the updated values.
+  public func bulkWrite(database: Database, values: [ScopedKey: Value], timestamp: Date = Date()) throws {
+    let usn = try incrementAuthorUSN(in: database)
+    for (key, value) in values {
+      try writeValue(value, to: key.key, scope: key.scope, timestamp: timestamp, in: database, usn: usn)
     }
   }
 
