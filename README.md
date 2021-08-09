@@ -106,3 +106,46 @@ XCTAssertEqual(try aliceDatabase.read(key: "shared").count, 2)
 // which one to return.
 XCTAssertThrowsError(try aliceDatabase.read(key: "shared").text)
 ```
+
+Some of the function signatures for `KeyValueDatabase` make more sense now that you know how it handles database merges. Most notably, `KeyValueDatabase.read(key:)` doesn't return a single value; it instead returns an array of `Version` structures:
+
+```swift
+public func read(key: String, scope: String = "") throws -> [Version]
+```
+
+(We'll talk about `scope` later...)
+
+A `Version` represents a *value written by a single author at a point in time.*
+
+```swift
+/// A read-only snapshot of a ``Value`` at a specific point in time.
+public struct Version: Equatable {
+  /// The ID of the author of this version.
+  public let authorID: UUID
+
+  /// When this version was created.
+  public let timestamp: Date
+
+  /// The value associated with this version.
+  public let value: Value
+}
+```
+
+To make it easy to read single values from the database, the module `KeyValueCRDT` defines convenience properties on version arrays.
+
+```swift
+extension Array where Element == Version {
+  // All of these properties:
+  //
+  // 1) Return `nil` if the value isn't defined or is the wrong type
+  // 2) Throw `KeyValueCRDTError.versionConflict` if there are multiple values
+  public var text: String? { get throws }
+  public var json: String? { get throws }
+  public var blob: String? { get throws }
+}
+```
+
+### Resolving version conflicts
+
+`KeyValueDatabase` does not try to pick a "winning" version for key values in the case of merge conflicts. Instead, it relies upon the application layer above the database to know what to do if there are multiple versions of a value for a specific key.
+
