@@ -147,5 +147,51 @@ extension Array where Element == Version {
 
 ### Resolving version conflicts
 
-`KeyValueDatabase` does not try to pick a "winning" version for key values in the case of merge conflicts. Instead, it relies upon the application layer above the database to know what to do if there are multiple versions of a value for a specific key.
+As you see, `KeyValueDatabase` does not try to pick a "winning" version for values associated with keys in the case of merge conflicts. Instead, it relies upon the application layer above the database to know what to do if there are multiple versions. The logic to pick the "winning" version requires application-specific knowledge about what's in the database. Sometimes it might be appropriate to pick the latest value ("last writer wins"), sometimes it may be possible to merge different versions, sometimes you need the user to decide, etc.
+
+You streamline the process of showing a single value in the event of conflicts, the `KeyValueCRDT` module defines the `Resolver` protocol. The job of a `Resolver` is to look at an array of `Version`s for a key and pick the "winning" value. `KeyValueCRDT` also provides `LastWriterWinsResolver`, which picks the winning version based upon timestamp.
+
+```swift
+/// A `Resolver` is responsible for picking a single value from an array of possible values.
+public protocol Resolver {
+  /// Given an array of versions, returns the "winning" value according to some algorithm.
+  func resolveVersions(_ versions: [Version]) -> Value?
+}
+
+// This extension allows syntax like: `database.read(key: "test").resolved(with: .lastWriterWins)?.text`
+extension Array where Element == Version {
+  /// Picks a single value from the version array using `resolver`.
+  public func resolved(with resolver: Resolver) -> Value? {
+    resolver.resolveVersions(self)
+  }
+}
+```
+
+### Advanced Topics
+
+#### Scopes
+
+It can be useful to group related keys together. `KeyValueDatabase` lets you do this with an optional `scope` parameter when reading or writing to the database.
+
+```swift
+let database = try KeyValueDatabase(fileURL: nil, author: .alice)
+
+// "Scopes" let you group related keys. For example, this groups the "text" and "coverImage" of a single item
+// using a scope.
+try database.writeText("scope 1 text", to: "text", scope: "item 1")
+try database.writeBlob(Data(), to: "coverImage", scope: "item 1")
+
+// You can use the *same key* in *different scopes* to store *different values*
+try database.writeText("scope 2 text", to: "text", scope: "item 2")
+
+// This works because even though the key is the same ("text"), it is used in two different scopes.
+XCTAssertEqual("scope 1 text", try database.read(key: "text", scope: "item 1").text)
+XCTAssertEqual("scope 2 text", try database.read(key: "text", scope: "item 2").text)
+```
+
+If you are used to dealing with file systems, it's tempting to think of *scopes* as *directories*, but this isn't exactly the right mental model. Instead, think of a *scope* as a *key prefix*, where the scope & key are concatenated together to form the "real" key used for storing the value. 
+
+(The problem with the "directory" mental model is it invites you to think of a *scope* as a thing that gets created and deleted separately from *keys*. For example, you need to create a directory before putting files in it. This model has all sorts of edge cases in replication that we don't want to deal with. For example, what happens if one replica deletes a "directory" while another replica adds a new item in that directory? The "scopes and keys are concatenated to make new keys" model avoids these problems.)
+
+#### Listing scopes and keys in the database
 
