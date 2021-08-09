@@ -18,6 +18,8 @@ final class KeyValueCRDTTests: XCTestCase {
     let result = try crdt.read(key: "key")
     XCTAssertEqual(result.count, 1)
     XCTAssertEqual(result.first?.value, .text("Goodbye, world!"))
+    XCTAssertEqual(try crdt.read(key: "key").text, "Goodbye, world!")
+    XCTAssertNil(try crdt.read(key: "key").json)
   }
 
   func testDelete() throws {
