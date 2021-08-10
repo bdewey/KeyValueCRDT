@@ -1,10 +1,22 @@
 # KeyValueCRDT
 
+`KeyValueCRDT` is a Swift module that provides a key/value *conflict-free replicated data type* (CRDT). In addition to the normal read/write APIs provided by a key/value database, `KeyValueCRDT` provides a *merge* API that merges databases. When merging, `KeyValueCRDT` detects conflicting changes to the same key and preserves all of the conflicting values. The intent of `KeyValueCRDT` is to make it easier to design file formats that work well with cloud storage, such as iCloud Documents.
+
 ## Motivation
 
 Cloud-based document storage, such as iCloud Documents, are fantastic for users with mobile devices but can present headaches for developers. While it is mostly hidden from users, the heart of systems like iCloud Documents is *replication*. When you edit a document that is stored in iCloud Documents, the operating system downloads a local copy of the document. This is fantastic for low-latency and for offline work. As you make changes, a background process will periodically upload your document back to iCloud. However, as soon as you start using the same document from multiple devices, you open the door to the possibility of *version conflicts.* What should iCloud do with changes to the same document that have come from your iPhone and your iPad?
 
 Handling version conflicts is a tricky thing to get right. The goal of `KeyValueCRDT` is to provide a general-purpose file format that works with cloud document storage, reliably and predictably merging changes from multiple devices.
+
+## Installing
+
+**KeyValueCRDT uses Swift 5.5 language features and requires Xcode 13 Beta.**
+
+`KeyValueCRDT` uses Swift Package Manager. To install, add this to the `dependencies:` section in your `Package.swift` file:
+
+```
+.package(url: "https://github.com/bdewey/KeyValueCRDT", from: "0.1.0"),
+```
 
 ## `KeyValueCRDT` explained step-by-step
 
@@ -195,3 +207,16 @@ If you are used to dealing with file systems, it's tempting to think of *scopes*
 
 #### Listing scopes and keys in the database
 
+The `KeyValueDatabase.keys(scope:key:)` method will return the keys in the database. You can limit the results to all keys within a scope, or all scopes that contain a particular key.
+
+#### Full-text search
+
+`KeyValueDatabase` creates a full-text index for all text values stored in the database. You query the index with `KeyValueDatabase.search(for:)`. 
+
+#### Bulk operations
+
+`KeyValueDatabase` uses sqlite, and each individual read/write operation is wrapped inside a transaction. If you need to read or write multiple keys at once, it can be considerably more efficient (and give you transactionally-consistent results) if you use one of the bulk APIs: `bulkRead()` and `bulkWrite()`.
+
+#### `UIKeyValueDocument`
+
+For applications that use UIKit, `UIKeyValueDocument` is a `UIDocument` subclass where the document contents are stored in a key-value database. Using `UIKeyValueDocument` is an easy way to interoperate with services like iCloud Documents. However, it comes with one significant limitation. In iOS, successfully working with services like iCloud involves careful coordination of I/O with other services, and natively sqlite does not know how to do this. Therefore, `UIKeyValueDocument` reads the entire database into memory, works on the in-memory copy, and writes the entire database to disk when it needs to coordinate with other proceses. Therefore, you should exclusively use `UIKeyValueDocument` for "document-sized" purposes, where reading/writing the entire document is feasible. If you do not want to read the entire contents of a key/value CRDT into memory at once, you should work directly with `KeyValueDatabase`. `KeyValueDatabase` loads data on-demand but does not interoperate with the document replication mechanisms in iOS.
