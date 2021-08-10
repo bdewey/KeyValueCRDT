@@ -90,7 +90,7 @@ XCTAssertEqual(try bobDatabase.read(key: "bob").text, "From Bob")
 XCTAssertNil(try bobDatabase.read(key: "alice").text)
 ```
 
-Things get interesting when there are conflicting changes to the same key. `KeyValueDatabase` implements *multi-value read* semantics to handle conflicts. While you can only *write* a single value for a key, when you *read* from the database, the database may return multiple values: One value for each `Author` that independently wrote to that key.
+Things get interesting when there are conflicting changes to the same key. `KeyValueDatabase` implements *multi-value register* semantics to handle conflicts. While you can only *write* a single value for a key, when you *read* from the database, the database may return multiple values: One value for each `Author` that independently wrote to that key.
 
 ```swift
 // Create two databases
