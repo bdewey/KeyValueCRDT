@@ -75,6 +75,14 @@ public final class UIKeyValueDocument: UIDocument {
     super.close(completionHandler: completionHandler)
   }
 
+  public override func save(to url: URL, for saveOperation: UIDocument.SaveOperation, completionHandler: ((Bool) -> Void)? = nil) {
+    Logger.keyValueDocument.info("Saving \(url.path)")
+    super.save(to: url, for: saveOperation) { success in
+      Logger.keyValueDocument.info("Save finished. Success = \(success)")
+      completionHandler?(success)
+    }
+  }
+
   public override func read(from url: URL) throws {
     Logger.keyValueDocument.info("Reading from \(url.path)")
     stopMonitoringChanges()
@@ -109,6 +117,7 @@ public final class UIKeyValueDocument: UIDocument {
     }
     Logger.keyValueDocument.info("document state \(documentState): Writing content to '\(url.path)'")
     try keyValueCRDT.save(to: url)
+    Logger.keyValueDocument.debug("document save finished")
   }
 }
 
