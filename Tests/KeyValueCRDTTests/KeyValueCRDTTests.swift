@@ -150,6 +150,23 @@ final class KeyValueCRDTTests: XCTestCase {
     XCTAssertEqual(try alice.statistics, try bob.statistics)
   }
 
+  func testWritesResolveConflicts() throws {
+    let alice = try KeyValueDatabase(fileURL: nil, author: .alice)
+    let bob = try KeyValueDatabase(fileURL: nil, author: .bob)
+    let charlie = try KeyValueDatabase(fileURL: nil, author: .charlie)
+    try alice.writeText("alice", to: "test")
+    try bob.writeText("bob", to: "test")
+    try charlie.merge(source: alice)
+    try charlie.merge(source: bob)
+    XCTAssertEqual(try charlie.read(key: "test").count, 2)
+    try charlie.writeText("resolved", to: "test")
+    XCTAssertEqual(try charlie.read(key: "test").text, "resolved")
+    try bob.merge(source: alice)
+    XCTAssertEqual(try bob.read(key: "test").count, 2)
+    try bob.merge(source: charlie)
+    XCTAssertEqual(try bob.read(key: "test").text, "resolved")
+  }
+
   func testDeletedKeysDontShowUp() throws {
     let alice = try KeyValueDatabase(fileURL: nil, author: .alice)
     let bob = try KeyValueDatabase(fileURL: nil, author: .bob)
@@ -297,4 +314,5 @@ private enum TestKey {
 private extension Author {
   static let alice = Author(id: UUID(), name: "Alice")
   static let bob = Author(id: UUID(), name: "Bob")
+  static let charlie = Author(id: UUID(), name: "Charlie")
 }

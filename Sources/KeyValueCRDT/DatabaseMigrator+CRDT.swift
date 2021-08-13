@@ -23,7 +23,6 @@ internal extension DatabaseMigrator {
         td.column("blobMimeType", .text)
         td.column("blob", .blob)
       })
-      // TODO: Get FTS5 working!
       try db.create(virtualTable: "entryFullText", using: FTS5()) { table in
         table.synchronize(withTable: "entry")
         table.column("text")
@@ -38,6 +37,20 @@ internal extension DatabaseMigrator {
         td.column("deletingUsn", .integer).notNull()
         td.primaryKey(["scope", "key", "deletingAuthorId", "deletingUsn"])
       })
+    }
+    migrator.registerMigration("noTombstonePrimarykey") { db in
+      try db.create(table: "tombstone_v2", body: { td in
+        td.column("scope", .text).notNull()
+        td.column("key", .text).notNull()
+        td.column("authorId", .text).notNull().references("author", onDelete: .restrict)
+        td.column("usn", .integer).notNull()
+        td.column("deletingAuthorId", .text).notNull().references("author", onDelete: .restrict)
+        td.column("deletingUsn", .integer).notNull()
+      })
+      try db.execute(sql: "INSERT INTO tombstone_v2 SELECT * FROM tombstone")
+      try db.drop(table: "tombstone")
+      try db.rename(table: "tombstone_v2", to: "tombstone")
+      try db.create(index: "tombstone_deletingAuthor", on: "tombstone", columns: ["deletingAuthorId", "deletingUsn"])
     }
     return migrator
   }()
