@@ -430,6 +430,9 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
   /// Backs up this CRDT to another CRDT.
   ///
   /// The expectation is `destination` is empty; any contents it has will be overwritten.
+  ///
+  /// - note: While this method overwrites the contents of `destination`, it **does not** trigger updates for any publishers created by ``readPublisher(scope:key:)``
+  /// or ``readPublisher(keyPrefix:)``.
   public func backup(to destination: KeyValueDatabase) throws {
     try databaseWriter.backup(to: destination.databaseWriter)
     let authorRecord = try destination.databaseWriter.read { db in

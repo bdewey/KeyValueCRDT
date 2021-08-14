@@ -11,6 +11,7 @@
 ### Fixed
 
 - Backing up data into another KeyValueDatabase could lead to inconsistencies if the backup was immediately used.
+- `UIKeyValueDocument` no longer uses the `backup` API to load data into memory, as this did not trigger observers.
 
 ## [0.2.0] - 2021-08-13
 

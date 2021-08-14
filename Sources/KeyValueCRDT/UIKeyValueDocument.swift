@@ -95,15 +95,10 @@ public final class UIKeyValueDocument: UIDocument {
       Logger.keyValueDocument.info("Ignoring read from \(url.path) because it contains no new information")
       return
     }
-    if try onDiskData.dominates(other: keyValueCRDT) {
-      Logger.keyValueDocument.info("Data at \(url.path) dominates the in-memory info; replacing all in-memory data.")
-      try onDiskData.backup(to: keyValueCRDT)
-      return
-    }
     // Neither dominate. Merge disk contents into memory.
     Logger.keyValueDocument.info("Merging contents of \(url.path) with in-memory data")
-    delegate?.keyValueDocument(self, willMergeCRDT: onDiskData, into: keyValueCRDT)
-    try keyValueCRDT.merge(source: onDiskData)
+    let changedEntries = try keyValueCRDT.merge(source: onDiskData)
+    Logger.keyValueDocument.info("Updated keys from merge: \(changedEntries.count)")
   }
 
   override public func writeContents(
