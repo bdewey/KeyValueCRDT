@@ -9,4 +9,7 @@ public enum KeyValueCRDTError: Error {
 
   /// Attempted to write invalid JSON as a JSON string.
   case invalidJSON
+
+  /// Something's wrong with the author table.
+  case authorTableInconsistency
 }

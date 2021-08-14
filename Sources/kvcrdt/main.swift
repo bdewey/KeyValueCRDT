@@ -2,10 +2,6 @@ import ArgumentParser
 import Foundation
 import KeyValueCRDT
 
-enum KVCRDTError: String, Error {
-  case invalidFile = "Invalid input file"
-}
-
 struct InputOptions: ParsableArguments {
   @Argument(help: "The key-value CRDT file", completion: .file()) var inputFileName: String
 }
@@ -14,7 +10,7 @@ struct KVCRDT: ParsableCommand {
   static var configuration = CommandConfiguration(
     commandName: "kvcrdt",
     abstract: "View and manipulate a key-value CRDT",
-    subcommands: [Statistics.self, List.self, Get.self],
+    subcommands: [Statistics.self, List.self, Get.self, EraseVersionHistory.self],
     defaultSubcommand: Statistics.self
   )
 }
@@ -25,9 +21,7 @@ struct Statistics: ParsableCommand {
   @OptionGroup var inputOptions: InputOptions
 
   func run() throws {
-    guard let fileURL = URL(string: inputOptions.inputFileName) else {
-      throw KVCRDTError.invalidFile
-    }
+    let fileURL = URL(fileURLWithPath: inputOptions.inputFileName)
     let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
     let stats = try crdt.statistics
     let output = """
@@ -47,9 +41,7 @@ struct List: ParsableCommand {
   @Option var key: String?
 
   func run() throws {
-    guard let fileURL = URL(string: input.inputFileName) else {
-      throw KVCRDTError.invalidFile
-    }
+    let fileURL = URL(fileURLWithPath: input.inputFileName)
     let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
     let scopedKeys = try crdt.keys(scope: scope, key: key)
     let table = Table<ScopedKey>(columns: [
@@ -68,15 +60,26 @@ struct Get: ParsableCommand {
   @OptionGroup var input: InputOptions
 
   func run() throws {
-    guard let fileURL = URL(string: input.inputFileName) else {
-      throw KVCRDTError.invalidFile
-    }
+    let fileURL = URL(fileURLWithPath: input.inputFileName)
     let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
     let versions = try crdt.read(key: key, scope: scope)
     let showHeader = versions.count > 1
     for version in versions {
       try printVersion(version, showHeader: showHeader)
     }
+  }
+}
+
+struct EraseVersionHistory: ParsableCommand {
+  static var configuration = CommandConfiguration(abstract: "Erases version history from the CRDT")
+
+  @OptionGroup var input: InputOptions
+
+  func run() throws {
+    let fileURL = URL(fileURLWithPath: input.inputFileName)
+    let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "KVCRDT Command Line"))
+    try crdt.eraseVersionHistory()
+    print("Success")
   }
 }
 

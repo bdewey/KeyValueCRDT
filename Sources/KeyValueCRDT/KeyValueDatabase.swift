@@ -1,6 +1,15 @@
 import Combine
 import Foundation
 import GRDB
+import Logging
+
+private extension Logger {
+  static let kvcrdt: Logger = {
+    var logger = Logger(label: "org.brians-brain.kvcrdt")
+    logger.logLevel = .debug
+    return logger
+  }()
+}
 
 /// Implements a key/value CRDT backed by a single sqlite database.
 ///
@@ -33,7 +42,6 @@ public final class KeyValueDatabase {
     try self.init(databaseWriter: databaseWriter, author: author)
   }
 
-  // TODO: There's too much repetition between the initializers.
   /// Creates a CRDT from an existing, initialized `DatabaseWriter`
   public init(databaseWriter: DatabaseWriter, author: Author) throws {
     try DatabaseMigrator.keyValueCRDT.migrate(databaseWriter)
@@ -46,7 +54,13 @@ public final class KeyValueDatabase {
     let authorRecord = try databaseWriter.read { db in
       try AuthorRecord.filter(key: author.id).fetchOne(db)
     }
-    self.authorRecord = authorRecord ?? AuthorRecord(id: author.id, name: author.name, usn: 0)
+    if let authorRecord = authorRecord {
+      Logger.kvcrdt.info("Found author record for \(authorRecord.id.uuidString); usn = \(authorRecord.usn)")
+      self.authorRecord = authorRecord
+    } else {
+      Logger.kvcrdt.info("Could not find an author record for \(author.id.uuidString), so creating a new one")
+      self.authorRecord = AuthorRecord(id: author.id, name: author.name, usn: 0)
+    }
   }
 
   /// Creates an in-memory clone of the database contents.
@@ -127,12 +141,13 @@ public final class KeyValueDatabase {
   ///   - key: The key associated with the value.
   ///   - scope: The scope for the key.
   ///   - timestamp: The timestamp to associate with this update.
+  @discardableResult
   public func writeText(
     _ text: String,
     to key: String,
     scope: String = "",
     timestamp: Date = Date()
-  ) throws {
+  ) throws -> Int {
     try writeValue(.text(text), to: key, scope: scope, timestamp: timestamp)
   }
 
@@ -143,7 +158,8 @@ public final class KeyValueDatabase {
   ///   - scope: The scope for the key.
   ///   - timestamp: The timestamp to associate with this update.
   /// - throws: KeyValueCRDTError.invalidJson if `json` is not a valid JSON string.
-  public func writeJson(_ json: String, to key: String, scope: String = "", timestamp: Date = Date()) throws {
+  @discardableResult
+  public func writeJson(_ json: String, to key: String, scope: String = "", timestamp: Date = Date()) throws -> Int {
     try writeValue(.json(json), to: key, scope: scope, timestamp: timestamp)
   }
 
@@ -153,13 +169,14 @@ public final class KeyValueDatabase {
   ///   - key: The key associated with the value.
   ///   - scope: The scope for the key.
   ///   - timestamp: The timestamp to associate with this update.
+  @discardableResult
   public func writeBlob(
     _ blob: Data,
     to key: String,
     scope: String = "",
     mimeType: String = "application/octet-stream",
     timestamp: Date = Date()
-  ) throws {
+  ) throws -> Int {
     try writeValue(.blob(mimeType: mimeType, blob: blob), to: key, scope: scope, timestamp: timestamp)
   }
 
@@ -310,12 +327,15 @@ public final class KeyValueDatabase {
   /// Writes multiple values to the database in a single transaction.
   /// - Parameter values: Mapping of keys/values to write to the database.
   /// - Parameter timestamp: The timestamp to associate with the updated values.
-  public func bulkWrite(_ values: [ScopedKey: Value], timestamp: Date = Date()) throws {
+  @discardableResult
+  public func bulkWrite(_ values: [ScopedKey: Value], timestamp: Date = Date()) throws -> Int {
     try databaseWriter.write { db in
       let usn = try incrementAuthorUSN(in: db)
       for (key, value) in values {
         try writeValue(value, to: key.key, scope: key.scope, timestamp: timestamp, in: db, usn: usn)
       }
+      assert(authorTableIsConsistent(in: db))
+      return usn
     }
   }
 
@@ -376,9 +396,11 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
   /// Merge another ``KeyValueCRDT`` into the receiver.
   public func merge(source: KeyValueDatabase) throws {
     try databaseWriter.write { localDB in
+      assert(authorTableIsConsistent(in: localDB))
       var localVersion = VersionVector(try AuthorRecord.fetchAll(localDB))
 
       let remoteInfo = try source.databaseWriter.read { remoteDB -> RemoteInfo in
+        assert(source.authorTableIsConsistent(in: remoteDB))
         let remoteVersion = VersionVector(try AuthorRecord.fetchAll(remoteDB))
         let needs = localVersion.needList(toMatch: remoteVersion)
         let entries = try EntryRecord.all().filter(needs).fetchAll(remoteDB)
@@ -392,6 +414,7 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
         try record.save(localDB)
         try garbageCollectTombstones(for: record, in: localDB)
       }
+      assert(authorTableIsConsistent(in: localDB))
     }
   }
 
@@ -400,6 +423,30 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
   /// The expectation is `destination` is empty; any contents it has will be overwritten.
   public func backup(to destination: KeyValueDatabase) throws {
     try databaseWriter.backup(to: destination.databaseWriter)
+    let authorRecord = try destination.databaseWriter.read { db in
+      try AuthorRecord.filter(key: author.id).fetchOne(db)
+    }
+    if let authorRecord = authorRecord {
+      destination.authorRecord = authorRecord
+    }
+  }
+
+  /// Erases the version history in this database.
+  ///
+  /// This method:
+  ///
+  /// - Removes all tombstones
+  /// - Makes all content look like it comes from this author
+  public func eraseVersionHistory() throws {
+    try databaseWriter.write { db in
+      try TombstoneRecord.deleteAll(db)
+      authorRecord.usn += 1
+      try authorRecord.save(db)
+      try EntryRecord.updateAll(db, EntryRecord.Column.authorId.set(to: authorRecord.id), EntryRecord.Column.usn.set(to: authorRecord.usn))
+      try AuthorRecord
+        .filter(AuthorRecord.Columns.id != authorRecord.id)
+        .deleteAll(db)
+    }
   }
 
   /// Writes the contents of the CRDT to a file.
@@ -427,15 +474,17 @@ private extension KeyValueDatabase {
     return authorRecord.usn
   }
 
+  @discardableResult
   func writeValue(
     _ value: Value,
     to key: String,
     scope: String,
     timestamp: Date
-  ) throws {
+  ) throws -> Int {
     try databaseWriter.write { db in
       let usn = try incrementAuthorUSN(in: db)
       try writeValue(value, to: key, scope: scope, timestamp: timestamp, in: db, usn: usn)
+      return usn
     }
   }
 
@@ -464,6 +513,7 @@ private extension KeyValueDatabase {
     )
     entryRecord.value = value
     try entryRecord.save(db)
+    assert(authorTableIsConsistent(in: db))
   }
 
   func createTombstones(key: String, scope: String, usn: Int, db: Database) throws {
@@ -516,6 +566,33 @@ private extension KeyValueDatabase {
       .filter(TombstoneRecord.Column.authorId == entryRecord.authorId)
       .filter(TombstoneRecord.Column.usn < entryRecord.usn)
       .deleteAll(db)
+  }
+
+  func authorTableIsConsistent(in db: Database) -> Bool {
+    do {
+      let authors = try AuthorRecord.fetchAll(db)
+      let request = EntryRecord
+        .select(EntryRecord.Column.authorId, max(EntryRecord.Column.usn))
+        .group(EntryRecord.Column.authorId)
+      let rows = try Row.fetchAll(db, request).map { row in
+        (key: row[0] as UUID, value: row[1] as Int)
+      }
+      var maxUsn: [UUID: Int] = [:]
+      for row in rows {
+        maxUsn[row.key] = row.value
+      }
+      let authorVersionVector = VersionVector(authors)
+      let entryVersionVector = VersionVector(rows)
+      if !authorVersionVector.dominates(entryVersionVector) {
+        let needs = authorVersionVector.needList(toMatch: entryVersionVector)
+        Logger.kvcrdt.error("Author table inconsistent with entries: \(needs)")
+        return false
+      }
+      return true
+    } catch {
+      Logger.kvcrdt.error("Unexpected error checking author table consistency: \(error)")
+      return false
+    }
   }
 }
 

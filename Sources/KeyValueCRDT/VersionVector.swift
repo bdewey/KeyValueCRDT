@@ -79,6 +79,11 @@ struct AuthorVersionIdentifier: Hashable {
     self.name = record.name
   }
 
+  init(_ id: UUID) {
+    self.id = id
+    self.name = "unknown"
+  }
+
   static func == (lhs: AuthorVersionIdentifier, rhs: AuthorVersionIdentifier) -> Bool {
     return lhs.id == rhs.id
   }
@@ -93,5 +98,9 @@ extension VersionVector where Key == AuthorVersionIdentifier, Value == Int {
   /// - precondition: Each `id` in `records` must be unique.
   init(_ records: [AuthorRecord]) {
     self.versions = Dictionary(uniqueKeysWithValues: records.map({ (key: AuthorVersionIdentifier($0), value: $0.usn) }))
+  }
+
+  init(_ tuples: [(key: UUID, value: Int)]) {
+    self.versions = Dictionary(uniqueKeysWithValues: tuples.map({ (key: AuthorVersionIdentifier($0.key), value: $0.value) }))
   }
 }

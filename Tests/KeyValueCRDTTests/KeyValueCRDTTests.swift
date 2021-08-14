@@ -303,6 +303,71 @@ final class KeyValueCRDTTests: XCTestCase {
     XCTAssertEqual(try backup.read(key: TestKey.shared).json, "42")
     XCTAssertEqual(try backup.read(key: TestKey.bob).count, 0)
   }
+
+  func testBackupUpdatesDestinationAuthorRecord() throws {
+    let crdt = try KeyValueDatabase(fileURL: nil, author: .alice)
+    XCTAssertEqual(try crdt.writeText("v1", to: "test"), 1)
+    XCTAssertEqual(try crdt.writeText("v2", to: "test"), 2)
+    XCTAssertEqual(try crdt.writeText("v3", to: "test"), 3)
+
+    let copy = try KeyValueDatabase(fileURL: nil, author: .alice)
+    try crdt.backup(to: copy)
+    XCTAssertEqual(try copy.read(key: "test").text, "v3")
+    XCTAssertEqual(try copy.writeText("v4", to: "test"), 4)
+  }
+
+  func testEraseVersionHistory() throws {
+    let alice = try KeyValueDatabase(fileURL: nil, author: .alice)
+    let bob = try KeyValueDatabase(fileURL: nil, author: .bob)
+    let charlie = try KeyValueDatabase(fileURL: nil, author: .charlie)
+    try alice.writeText("alice", to: "test")
+    try bob.writeText("bob", to: "test")
+    try charlie.merge(source: alice)
+    try charlie.merge(source: bob)
+    XCTAssertEqual(try charlie.read(key: "test").count, 2)
+    try charlie.writeText("resolved", to: "test")
+    XCTAssertEqual(try charlie.read(key: "test").text, "resolved")
+    try bob.merge(source: alice)
+    XCTAssertEqual(try bob.read(key: "test").count, 2)
+    try bob.merge(source: charlie)
+    XCTAssertEqual(try bob.read(key: "test").text, "resolved")
+    XCTAssertEqual(Statistics(entryCount: 1, authorCount: 3, tombstoneCount: 2), try bob.statistics)
+    try bob.eraseVersionHistory()
+    XCTAssertEqual(Statistics(entryCount: 1, authorCount: 1, tombstoneCount: 0), try bob.statistics)
+  }
+
+  func testEraseVersionHistoryWorksWithNewAuthor() throws {
+    let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("usntest.kvcrdt")
+    defer {
+      try? FileManager.default.removeItem(at: fileURL)
+    }
+    do {
+      let crdt = try KeyValueDatabase(fileURL: fileURL, author: .alice)
+      XCTAssertEqual(try crdt.writeText("v1", to: "test"), 1)
+      XCTAssertEqual(try crdt.writeText("v2", to: "test"), 2)
+    }
+    do {
+      let crdt = try KeyValueDatabase(fileURL: fileURL, author: .bob)
+      try crdt.eraseVersionHistory()
+      XCTAssertEqual(try crdt.read(key: "test").text, "v2")
+    }
+  }
+
+  func testAuthorUsnPersists() throws {
+    let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("usntest.kvcrdt")
+    defer {
+      try? FileManager.default.removeItem(at: fileURL)
+    }
+    do {
+      let crdt = try KeyValueDatabase(fileURL: fileURL, author: .alice)
+      XCTAssertEqual(try crdt.writeText("v1", to: "test"), 1)
+      XCTAssertEqual(try crdt.writeText("v2", to: "test"), 2)
+    }
+    do {
+      let crdt = try KeyValueDatabase(fileURL: fileURL, author: .alice)
+      XCTAssertEqual(try crdt.writeText("v3", to: "test"), 3)
+    }
+  }
 }
 
 private enum TestKey {
