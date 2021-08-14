@@ -1,10 +1,15 @@
 import Foundation
 
 /// A scope/key pair.
-public struct ScopedKey: Hashable {
+public struct ScopedKey: Hashable, ExpressibleByStringLiteral {
   public init(scope: String = "", key: String) {
     self.scope = scope
     self.key = key
+  }
+
+  public init(stringLiteral: String) {
+    self.scope = ""
+    self.key = stringLiteral
   }
 
   /// The scope that contains the key.

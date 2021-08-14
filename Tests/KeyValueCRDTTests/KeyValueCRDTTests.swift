@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import KeyValueCRDT
 import XCTest
@@ -367,6 +368,26 @@ final class KeyValueCRDTTests: XCTestCase {
       let crdt = try KeyValueDatabase(fileURL: fileURL, author: .alice)
       XCTAssertEqual(try crdt.writeText("v3", to: "test"), 3)
     }
+  }
+
+  func testMergeChangesArePublished() throws {
+    let alice = try KeyValueDatabase(fileURL: nil, author: .alice)
+    let bob = try KeyValueDatabase(fileURL: nil, author: .bob)
+
+    let bobGotValueExpectaton = expectation(description: "Bob got the updated value")
+
+    let cancelable = bob.readPublisher(key: "test").sink { _ in } receiveValue: { values in
+      if (try? values["test"]?.text) == "hello, world" {
+        bobGotValueExpectaton.fulfill()
+      }
+    }
+    defer {
+      cancelable.cancel()
+    }
+
+    try alice.writeText("hello, world", to: "test")
+    XCTAssertEqual(try bob.merge(source: alice), ["test"])
+    waitForExpectations(timeout: 3)
   }
 }
 
