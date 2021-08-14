@@ -393,8 +393,14 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
     }
   }
 
-  /// Merge another ``KeyValueCRDT`` into the receiver.
-  public func merge(source: KeyValueDatabase) throws {
+  /// Merge another ``KeyValueDatabase`` into the receiver.
+  ///
+  /// - Parameters:
+  ///   - source: The database to merge into the receiver.
+  ///   - dryRun: If true, don't actually merge; just compute what will change.
+  /// - returns: The keys that changed because of this merge.
+  @discardableResult
+  public func merge(source: KeyValueDatabase, dryRun: Bool = false) throws -> Set<ScopedKey> {
     try databaseWriter.write { localDB in
       assert(authorTableIsConsistent(in: localDB))
       var localVersion = VersionVector(try AuthorRecord.fetchAll(localDB))
@@ -407,14 +413,17 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
         let tombstones = try TombstoneRecord.all().filter(needs).fetchAll(remoteDB)
         return RemoteInfo(version: remoteVersion, entries: entries, tombstones: tombstones)
       }
-      localVersion.formUnion(remoteInfo.version)
-      try updateAuthors(localVersion, in: localDB)
-      try processTombstones(remoteInfo.tombstones, in: localDB)
-      for record in remoteInfo.entries {
-        try record.save(localDB)
-        try garbageCollectTombstones(for: record, in: localDB)
+      if !dryRun {
+        localVersion.formUnion(remoteInfo.version)
+        try updateAuthors(localVersion, in: localDB)
+        try processTombstones(remoteInfo.tombstones, in: localDB)
+        for record in remoteInfo.entries {
+          try record.save(localDB)
+          try garbageCollectTombstones(for: record, in: localDB)
+        }
+        assert(authorTableIsConsistent(in: localDB))
       }
-      assert(authorTableIsConsistent(in: localDB))
+      return Set(remoteInfo.entries.map { ScopedKey($0) })
     }
   }
 

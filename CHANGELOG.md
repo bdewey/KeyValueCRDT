@@ -5,6 +5,8 @@
 ### Added
 
 - A diagnostic command-line-option to erase version history. Helpful for recovering when the version history is corrupt.
+- Merging now returns a list of changed keys, and there is an option to do a dry-run merge. 
+- The `kvcrdt` command-line tool can perform merges.
 
 ### Fixed
 

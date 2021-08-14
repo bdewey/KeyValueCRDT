@@ -10,7 +10,7 @@ struct KVCRDT: ParsableCommand {
   static var configuration = CommandConfiguration(
     commandName: "kvcrdt",
     abstract: "View and manipulate a key-value CRDT",
-    subcommands: [Statistics.self, List.self, Get.self, EraseVersionHistory.self],
+    subcommands: [Statistics.self, List.self, Get.self, EraseVersionHistory.self, Merge.self],
     defaultSubcommand: Statistics.self
   )
 }
@@ -80,6 +80,29 @@ struct EraseVersionHistory: ParsableCommand {
     let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "KVCRDT Command Line"))
     try crdt.eraseVersionHistory()
     print("Success")
+  }
+}
+
+struct Merge: ParsableCommand {
+  static var configuration = CommandConfiguration(abstract: "Merge two databases")
+
+  @Option(help: "The source of new merge records", completion: .file()) var source: String
+  @Option(help: "The destination of the merge", completion: .file()) var dest: String
+  @Flag(help: "If true, don't actually merge, just compute what changes") var dryRun: Bool = false
+
+  func run() throws {
+    if dryRun { print("** Dry run **") }
+    let sourceURL = URL(fileURLWithPath: source)
+    let destURL = URL(fileURLWithPath: dest)
+    let author = Author(id: UUID(), name: "KVCRDT Command Line")
+    let sourceDatabase = try KeyValueDatabase(fileURL: sourceURL, author: author)
+    let destinationDatabase = try KeyValueDatabase(fileURL: destURL, author: author)
+    let changedEntries = try destinationDatabase.merge(source: sourceDatabase, dryRun: dryRun)
+    let table = Table<ScopedKey>(columns: [
+      Table.Column(name: "Scope", formatter: { $0.scope }),
+      Table.Column(name: "Key", formatter: { $0.key }),
+    ], rows: Array(changedEntries))
+    print("\(table)")
   }
 }
 

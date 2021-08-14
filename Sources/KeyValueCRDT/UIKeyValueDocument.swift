@@ -138,8 +138,8 @@ private extension UIKeyValueDocument {
         let conflictQueue = try memoryDatabaseQueue(fileURL: tempURL)
         let conflictCRDT = try KeyValueDatabase(databaseWriter: conflictQueue, author: author)
         delegate?.keyValueDocument(self, willMergeCRDT: conflictCRDT, into: keyValueCRDT)
-        try keyValueCRDT.merge(source: conflictCRDT)
-        Logger.keyValueDocument.info("UIDocument: Merged conflict version: \(conflictVersion)")
+        let updates = try keyValueCRDT.merge(source: conflictCRDT)
+        Logger.keyValueDocument.info("UIDocument: Merged conflict version: \(conflictVersion). Updates = \(updates)")
         conflictVersion.isResolved = true
         try conflictVersion.remove()
       }
