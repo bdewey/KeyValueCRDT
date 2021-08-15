@@ -426,6 +426,34 @@ final class KeyValueCRDTTests: XCTestCase {
 
     waitForExpectations(timeout: 3)
   }
+
+  func testUpdatedValuesPublisherOnMerge() throws {
+    let alice = try KeyValueDatabase(fileURL: nil, author: .alice)
+    let bob = try KeyValueDatabase(fileURL: nil, author: .bob)
+
+    try alice.writeText("alice's version", to: "shared")
+    try bob.writeText("bob's version", to: "shared")
+    try bob.writeText("bob solo", to: "bob")
+
+    let sharedKeyExpectation = expectation(description: "shared key")
+    let soloKeyExpectation = expectation(description: "solo key")
+
+    let subscription = alice.updatedValuesPublisher.sink { (scopedKey, versions) in
+      if scopedKey == "shared" {
+        sharedKeyExpectation.fulfill()
+      }
+      if scopedKey == "bob" {
+        soloKeyExpectation.fulfill()
+        XCTAssertEqual(try? versions.text, "bob solo")
+      }
+    }
+    defer {
+      subscription.cancel()
+    }
+
+    try alice.merge(source: bob)
+    waitForExpectations(timeout: 3)
+  }
 }
 
 private enum TestKey {

@@ -213,6 +213,14 @@ public final class KeyValueDatabase {
     return records.map { Version($0) }
   }
 
+  private func read(scopedKey: ScopedKey, db: Database) throws -> [Version] {
+    let records = try EntryRecord
+      .filter(EntryRecord.Column.key == scopedKey.key)
+      .filter(EntryRecord.Column.scope == scopedKey.scope)
+      .fetchAll(db)
+    return records.map { Version($0) }
+  }
+
   /// Bulk-read: Returns the values for all matching keys.
   /// - Parameters:
   ///   - scope: If present, limits the results only to values in this scope.
@@ -417,6 +425,8 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
   /// - returns: The keys that changed because of this merge.
   @discardableResult
   public func merge(source: KeyValueDatabase, dryRun: Bool = false) throws -> Set<ScopedKey> {
+    var updatedKeys = Set<ScopedKey>()
+    var updatedValues: [(ScopedKey, [Version])] = []
     try databaseWriter.write { localDB in
       assert(authorTableIsConsistent(in: localDB))
       var localVersion = VersionVector(try AuthorRecord.fetchAll(localDB))
@@ -436,11 +446,16 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
         for record in remoteInfo.entries {
           try record.save(localDB)
           try garbageCollectTombstones(for: record, in: localDB)
+          updatedKeys.insert(ScopedKey(record))
         }
         assert(authorTableIsConsistent(in: localDB))
+        updatedValues = try updatedKeys.map { ($0, try read(scopedKey: $0, db: localDB)) }
       }
-      return Set(remoteInfo.entries.map { ScopedKey($0) })
     }
+    for updatedValue in updatedValues {
+      updatedValueSubject.send(updatedValue)
+    }
+    return updatedKeys
   }
 
   /// Backs up this CRDT to another CRDT.
