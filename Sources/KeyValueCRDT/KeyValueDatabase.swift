@@ -73,6 +73,14 @@ public final class KeyValueDatabase {
   /// The author for any changes to the CRDT made by this instance.
   public let author: Author
 
+  /// Publishes individual updates to the database.
+  ///
+  /// In contrast with ``readPublisher(scope:key:)``, which republishes *all* values when *anything* changes, this publisher publishes only the changed values.
+  public private(set) lazy var updatedValuesPublisher: AnyPublisher<(ScopedKey, [Version]), Never> = updatedValueSubject.eraseToAnyPublisher()
+
+  /// For publishing individual changes to the database.
+  private let updatedValueSubject = PassthroughSubject<(ScopedKey, [Version]), Never>()
+
   private let databaseWriter: DatabaseWriter
 
   /// Holds the current author record so we don't have to keep re-reading it.
@@ -330,14 +338,18 @@ public final class KeyValueDatabase {
   /// - Parameter timestamp: The timestamp to associate with the updated values.
   @discardableResult
   public func bulkWrite(_ values: [ScopedKey: Value], timestamp: Date = Date()) throws -> Int {
-    try databaseWriter.write { db in
+    let usn = try databaseWriter.write { db -> Int in
       let usn = try incrementAuthorUSN(in: db)
       for (key, value) in values {
-        try writeValue(value, to: key.key, scope: key.scope, timestamp: timestamp, in: db, usn: usn)
+        _ = try writeValue(value, to: key.key, scope: key.scope, timestamp: timestamp, in: db, usn: usn)
       }
       assert(authorTableIsConsistent(in: db))
       return usn
     }
+    values
+      .map { ($0.key, [Version(authorID: author.id, timestamp: timestamp, value: $0.value)]) }
+      .forEach { updatedValueSubject.send($0) }
+    return usn
   }
 
   /// Writes multiple values to the database in a single transaction.
@@ -348,8 +360,11 @@ public final class KeyValueDatabase {
   public func bulkWrite(database: Database, values: [ScopedKey: Value], timestamp: Date = Date()) throws {
     let usn = try incrementAuthorUSN(in: database)
     for (key, value) in values {
-      try writeValue(value, to: key.key, scope: key.scope, timestamp: timestamp, in: database, usn: usn)
+      _ = try writeValue(value, to: key.key, scope: key.scope, timestamp: timestamp, in: database, usn: usn)
     }
+    values
+      .map { ($0.key, [Version(authorID: author.id, timestamp: timestamp, value: $0.value)]) }
+      .forEach { updatedValueSubject.send($0) }
   }
 
   /// Delete a key from the database.
@@ -494,11 +509,12 @@ private extension KeyValueDatabase {
     scope: String,
     timestamp: Date
   ) throws -> Int {
-    try databaseWriter.write { db in
+    let record = try databaseWriter.write { db -> EntryRecord in
       let usn = try incrementAuthorUSN(in: db)
-      try writeValue(value, to: key, scope: scope, timestamp: timestamp, in: db, usn: usn)
-      return usn
+      return try writeValue(value, to: key, scope: scope, timestamp: timestamp, in: db, usn: usn)
     }
+    updatedValueSubject.send((ScopedKey(scope: scope, key: key), [Version(record)]))
+    return record.usn
   }
 
   func writeValue(
@@ -508,7 +524,7 @@ private extension KeyValueDatabase {
     timestamp: Date,
     in db: Database,
     usn: Int
-  ) throws {
+  ) throws -> EntryRecord {
     if let json = value.json {
       let result = try Int.fetchOne(db, sql: "SELECT json_valid(?);", arguments: [json])
       if result != 1 {
@@ -527,6 +543,7 @@ private extension KeyValueDatabase {
     entryRecord.value = value
     try entryRecord.save(db)
     assert(authorTableIsConsistent(in: db))
+    return entryRecord
   }
 
   func createTombstones(key: String, scope: String, usn: Int, db: Database) throws {

@@ -11,8 +11,14 @@ public struct Version: Equatable {
   /// The value associated with this version.
   public let value: Value
 
+  internal init(authorID: UUID, timestamp: Date, value: Value) {
+    self.authorID = authorID
+    self.timestamp = timestamp
+    self.value = value
+  }
+
   /// Construct a Version from an EntryRecord
-  init(_ record: EntryRecord) {
+  internal init(_ record: EntryRecord) {
     self.authorID = record.authorId
     self.timestamp = record.timestamp
     self.value = record.value

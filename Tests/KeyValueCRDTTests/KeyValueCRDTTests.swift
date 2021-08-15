@@ -389,6 +389,43 @@ final class KeyValueCRDTTests: XCTestCase {
     XCTAssertEqual(try bob.merge(source: alice), ["test"])
     waitForExpectations(timeout: 3)
   }
+
+  func testComparePublishers() throws {
+    let alice = try KeyValueDatabase(fileURL: nil, author: .alice)
+    try alice.bulkWrite(["key1": "value 1", "key2": "value 2"])
+
+    // `readPublisher` is "hot" -- it publishes the current value at the time you subscribe.
+    // `readPublisher` also republishes *everything* when *anything that matches* changes.
+    // This is useful to get a consistent view of the data in the database.
+    let readPublisherExpectation = expectation(description: "read publisher")
+    let readPublisherSubscription = alice.readPublisher(keyPrefix: "key").sink(receiveCompletion: { _ in }) { versions in
+      let values = versions.mapValues { versionArray in
+        versionArray.map { $0.value }
+      }
+      let expectedValues: [ScopedKey: [Value]] = ["key1": ["value 1"], "key2": ["updated"]]
+      if values == expectedValues {
+        readPublisherExpectation.fulfill()
+      }
+    }
+    defer {
+      readPublisherSubscription.cancel()
+    }
+
+    // In contrast, `updatedValuesPublisher` is "cold". It publishes only values that change after they change.
+    let updatedValueExpectation = expectation(description: "updated value publisher")
+    let valuesSubscription = alice.updatedValuesPublisher.sink { (scopedKey, versions) in
+      XCTAssertEqual(scopedKey, "key2")
+      XCTAssertEqual(try! versions.text, "updated")
+      updatedValueExpectation.fulfill()
+    }
+    defer {
+      valuesSubscription.cancel()
+    }
+
+    try alice.writeText("updated", to: "key2")
+
+    waitForExpectations(timeout: 3)
+  }
 }
 
 private enum TestKey {
