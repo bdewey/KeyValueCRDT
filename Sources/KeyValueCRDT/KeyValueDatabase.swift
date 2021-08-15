@@ -85,7 +85,8 @@ public final class KeyValueDatabase {
         return Statistics(
           entryCount: try EntryRecord.fetchCount(db),
           authorCount: try AuthorRecord.fetchCount(db),
-          tombstoneCount: try TombstoneRecord.fetchCount(db)
+          tombstoneCount: try TombstoneRecord.fetchCount(db),
+          authorTableIsConsistent: authorTableIsConsistent(in: db)
         )
       }
     }

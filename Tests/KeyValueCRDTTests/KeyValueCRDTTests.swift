@@ -332,9 +332,9 @@ final class KeyValueCRDTTests: XCTestCase {
     XCTAssertEqual(try bob.read(key: "test").count, 2)
     try bob.merge(source: charlie)
     XCTAssertEqual(try bob.read(key: "test").text, "resolved")
-    XCTAssertEqual(Statistics(entryCount: 1, authorCount: 3, tombstoneCount: 2), try bob.statistics)
+    XCTAssertEqual(Statistics(entryCount: 1, authorCount: 3, tombstoneCount: 2, authorTableIsConsistent: true), try bob.statistics)
     try bob.eraseVersionHistory()
-    XCTAssertEqual(Statistics(entryCount: 1, authorCount: 1, tombstoneCount: 0), try bob.statistics)
+    XCTAssertEqual(Statistics(entryCount: 1, authorCount: 1, tombstoneCount: 0, authorTableIsConsistent: true), try bob.statistics)
   }
 
   func testEraseVersionHistoryWorksWithNewAuthor() throws {

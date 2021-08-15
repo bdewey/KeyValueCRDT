@@ -30,6 +30,10 @@ Tombstones: \(stats.tombstoneCount)
 Authors:    \(stats.authorCount)
 """
     print(output)
+    if !stats.authorTableIsConsistent {
+      print("\n\nWARNING: The author table is not consistent with the entries; merges to/from this database will not work.")
+      print("Recover by running: kvcrdt erase-version-history <file>")
+    }
   }
 }
 
