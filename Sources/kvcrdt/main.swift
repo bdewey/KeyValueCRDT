@@ -10,7 +10,7 @@ struct KVCRDT: ParsableCommand {
   static var configuration = CommandConfiguration(
     commandName: "kvcrdt",
     abstract: "View and manipulate a key-value CRDT",
-    subcommands: [Statistics.self, List.self, Get.self, EraseVersionHistory.self, Merge.self],
+    subcommands: [Statistics.self, List.self, Get.self, EraseVersionHistory.self, Merge.self, Search.self],
     defaultSubcommand: Statistics.self
   )
 }
@@ -106,6 +106,24 @@ struct Merge: ParsableCommand {
       Table.Column(name: "Scope", formatter: { $0.scope }),
       Table.Column(name: "Key", formatter: { $0.key }),
     ], rows: Array(changedEntries))
+    print("\(table)")
+  }
+}
+
+struct Search: ParsableCommand {
+  static var configuration = CommandConfiguration(abstract: "Perform a full-text search")
+
+  @OptionGroup var input: InputOptions
+  @Option(help: "The text to search for") var searchText: String
+
+  func run() throws {
+    let fileURL = URL(fileURLWithPath: input.inputFileName)
+    let database = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "kvcrdt"))
+    let results = try database.searchText(for: searchText)
+    let table = Table<ScopedKey>(columns: [
+      Table.Column(name: "Scope", formatter: { $0.scope }),
+      Table.Column(name: "Key", formatter: { $0.key }),
+    ], rows: results)
     print("\(table)")
   }
 }

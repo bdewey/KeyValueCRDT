@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Full-text search to the `kvcdrt` command-line tool
+
 ## [0.2.1-beta] - 2021-08-14
 
 ### Added
