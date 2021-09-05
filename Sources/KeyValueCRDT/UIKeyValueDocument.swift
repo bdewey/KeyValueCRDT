@@ -37,9 +37,7 @@ public final class UIKeyValueDocument: UIDocument {
   /// - parameter author: An ``Author`` struct that identifies all changes made by this instance.
   public init(fileURL: URL, author: Author) throws {
     self.author = author
-    self.keyValueCRDT = try KeyValueDatabase(fileURL: nil, author: author)
     super.init(fileURL: fileURL)
-    startMonitoringChanges()
   }
 
   public weak var delegate: UIKeyValueDocumentDelegate?
@@ -48,7 +46,9 @@ public final class UIKeyValueDocument: UIDocument {
   public let author: Author
 
   /// The key-value CRDT stored in the document.
-  public let keyValueCRDT: KeyValueDatabase
+  ///
+  /// This value is `nil` upon creating a document and will be non-nil after opening it.
+  public private(set) var keyValueCRDT: KeyValueDatabase?
 
   /// Pipeline for monitoring for unsaved changes to the in-memory database.
   private var hasUnsavedChangesPipeline: AnyCancellable?
@@ -62,6 +62,9 @@ public final class UIKeyValueDocument: UIDocument {
         name: UIDocument.stateChangedNotification,
         object: self
       )
+      if self.keyValueCRDT != nil {
+        self.startMonitoringChanges()
+      }
       self.handleDocumentStateChanged()
       completionHandler?(success)
     }
@@ -91,14 +94,21 @@ public final class UIKeyValueDocument: UIDocument {
     }
     let onDiskDataQueue = try memoryDatabaseQueue(fileURL: url)
     let onDiskData = try KeyValueDatabase(databaseWriter: onDiskDataQueue, author: author)
-    if try keyValueCRDT.dominates(other: onDiskData) {
-      Logger.keyValueDocument.info("Ignoring read from \(url.path) because it contains no new information")
-      return
+    if let keyValueCRDT = keyValueCRDT {
+      if try keyValueCRDT.dominates(other: onDiskData) {
+        Logger.keyValueDocument.info("Ignoring read from \(url.path) because it contains no new information")
+        return
+      }
+      // Neither dominate. Merge disk contents into memory.
+      Logger.keyValueDocument.info("Merging contents of \(url.path) with in-memory data")
+      let changedEntries = try keyValueCRDT.merge(source: onDiskData)
+      Logger.keyValueDocument.info("Updated keys from merge: \(changedEntries.count)")
+    } else {
+      Logger.keyValueDocument.info("Loading initial copy of database into memory")
+      let inMemoryCopy = try KeyValueDatabase(fileURL: nil, author: author)
+      try onDiskData.backup(to: inMemoryCopy)
+      self.keyValueCRDT = inMemoryCopy
     }
-    // Neither dominate. Merge disk contents into memory.
-    Logger.keyValueDocument.info("Merging contents of \(url.path) with in-memory data")
-    let changedEntries = try keyValueCRDT.merge(source: onDiskData)
-    Logger.keyValueDocument.info("Updated keys from merge: \(changedEntries.count)")
   }
 
   override public func writeContents(
@@ -111,7 +121,7 @@ public final class UIKeyValueDocument: UIDocument {
       return
     }
     Logger.keyValueDocument.info("document state \(documentState): Writing content to '\(url.path)'")
-    try keyValueCRDT.save(to: url)
+    try keyValueCRDT?.save(to: url)
     Logger.keyValueDocument.debug("document save finished")
   }
 }
@@ -119,7 +129,7 @@ public final class UIKeyValueDocument: UIDocument {
 // MARK: - Private
 private extension UIKeyValueDocument {
   @objc func handleDocumentStateChanged() {
-    guard documentState.contains(.inConflict) else {
+    guard documentState.contains(.inConflict), let keyValueCRDT = keyValueCRDT else {
       return
     }
     Logger.keyValueDocument.info("Handling conflict")
@@ -187,6 +197,10 @@ private extension UIKeyValueDocument {
   }
 
   func startMonitoringChanges() {
+    guard let keyValueCRDT = keyValueCRDT else {
+      assertionFailure()
+      return
+    }
     hasUnsavedChangesPipeline = keyValueCRDT.didChangePublisher().sink(receiveCompletion: { completion in
       switch completion {
       case .failure(let error):

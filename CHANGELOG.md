@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## [0.3.0-beta] - 2021-09-05
+
+### Changed
+
+- UIKeyValueDocument now has a nilable keyValueCRDT property. It will be set to non-nil after the initial open. This dramatically speeds up the time to open a database, because we know we don't need to merge on-disk and in-memory contents.
 
 ### Added
 
