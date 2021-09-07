@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0-beta] - 2021-09-06
+
+### Changed
+
+I wasn't picking up all changes when merging two different databases created on the same device because they used the same author ID, so I assumed I could ignore entries that I in fact needed.
+
+This version gets rid of the notion of an Author that has a stable UUID identifying all changes from that author across database instances. Instead, the database creates an instanceID for each open instance of the database, and it annotates each instanceID with a textual description (usually the device name) and a timestamp.
+
+This approach will lead to way more entries in the authors table than before. Basically there will be one entry per "write session" instead of one entry per device. Hopefully that won't balloon the database size too much, nor slow down merging too much.
+
 ## [0.3.0-beta] - 2021-09-05
 
 ### Changed
