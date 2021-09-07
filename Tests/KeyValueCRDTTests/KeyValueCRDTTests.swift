@@ -305,7 +305,7 @@ final class KeyValueCRDTTests: XCTestCase {
     XCTAssertEqual(try backup.read(key: TestKey.bob).count, 0)
   }
 
-  func testBackupUpdatesDestinationAuthorRecord() throws {
+  func testBackupDoesNotUpdateDestinationAuthorRecord() throws {
     let crdt = try KeyValueDatabase(fileURL: nil, author: .alice)
     XCTAssertEqual(try crdt.writeText("v1", to: "test"), 1)
     XCTAssertEqual(try crdt.writeText("v2", to: "test"), 2)
@@ -314,7 +314,7 @@ final class KeyValueCRDTTests: XCTestCase {
     let copy = try KeyValueDatabase(fileURL: nil, author: .alice)
     try crdt.backup(to: copy)
     XCTAssertEqual(try copy.read(key: "test").text, "v3")
-    XCTAssertEqual(try copy.writeText("v4", to: "test"), 4)
+    XCTAssertEqual(try copy.writeText("v4", to: "test"), 1)
   }
 
   func testEraseVersionHistory() throws {
@@ -354,7 +354,7 @@ final class KeyValueCRDTTests: XCTestCase {
     }
   }
 
-  func testAuthorUsnPersists() throws {
+  func testAuthorUsnResets() throws {
     let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("usntest.kvcrdt")
     defer {
       try? FileManager.default.removeItem(at: fileURL)
@@ -366,7 +366,7 @@ final class KeyValueCRDTTests: XCTestCase {
     }
     do {
       let crdt = try KeyValueDatabase(fileURL: fileURL, author: .alice)
-      XCTAssertEqual(try crdt.writeText("v3", to: "test"), 3)
+      XCTAssertEqual(try crdt.writeText("v3", to: "test"), 1)
     }
   }
 

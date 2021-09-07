@@ -35,15 +35,20 @@ public final class UIKeyValueDocument: UIDocument {
   ///
   /// - parameter fileURL: The URL for the key-value CRDT database.
   /// - parameter author: An ``Author`` struct that identifies all changes made by this instance.
-  public init(fileURL: URL, author: Author) throws {
-    self.author = author
+  public init(fileURL: URL, authorDescription: String) throws {
+    self.authorDescription = authorDescription
     super.init(fileURL: fileURL)
+  }
+
+  @available(*, deprecated, message: "Use init(fileURL:authorDescription:) instead")
+  public convenience init(fileURL: URL, author: Author) throws {
+    try self.init(fileURL: fileURL, authorDescription: author.description)
   }
 
   public weak var delegate: UIKeyValueDocumentDelegate?
 
-  /// The ``Author`` identifying changes made by this instance.
-  public let author: Author
+  /// A human-readable hint identifying the author of any changes made from this instance.
+  public let authorDescription: String
 
   /// The key-value CRDT stored in the document.
   ///
@@ -93,7 +98,7 @@ public final class UIKeyValueDocument: UIDocument {
       startMonitoringChanges()
     }
     let onDiskDataQueue = try memoryDatabaseQueue(fileURL: url)
-    let onDiskData = try KeyValueDatabase(databaseWriter: onDiskDataQueue, author: author)
+    let onDiskData = try KeyValueDatabase(databaseWriter: onDiskDataQueue, authorDescription: authorDescription)
     if let keyValueCRDT = keyValueCRDT {
       if try keyValueCRDT.dominates(other: onDiskData) {
         Logger.keyValueDocument.info("Ignoring read from \(url.path) because it contains no new information")
@@ -105,7 +110,7 @@ public final class UIKeyValueDocument: UIDocument {
       Logger.keyValueDocument.info("Updated keys from merge: \(changedEntries.count)")
     } else {
       Logger.keyValueDocument.info("Loading initial copy of database into memory")
-      let inMemoryCopy = try KeyValueDatabase(fileURL: nil, author: author)
+      let inMemoryCopy = try KeyValueDatabase(fileURL: nil, authorDescription: authorDescription)
       try onDiskData.backup(to: inMemoryCopy)
       self.keyValueCRDT = inMemoryCopy
     }
@@ -141,7 +146,7 @@ private extension UIKeyValueDocument {
           try? FileManager.default.removeItem(at: tempURL)
         }
         let conflictQueue = try memoryDatabaseQueue(fileURL: tempURL)
-        let conflictCRDT = try KeyValueDatabase(databaseWriter: conflictQueue, author: author)
+        let conflictCRDT = try KeyValueDatabase(databaseWriter: conflictQueue, authorDescription: authorDescription)
         delegate?.keyValueDocument(self, willMergeCRDT: conflictCRDT, into: keyValueCRDT)
         let updates = try keyValueCRDT.merge(source: conflictCRDT)
         Logger.keyValueDocument.info("UIDocument: Merged conflict version: \(conflictVersion). Updates = \(updates)")
