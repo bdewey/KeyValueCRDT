@@ -52,6 +52,11 @@ internal extension DatabaseMigrator {
       try db.rename(table: "tombstone_v2", to: "tombstone")
       try db.create(index: "tombstone_deletingAuthor", on: "tombstone", columns: ["deletingAuthorId", "deletingUsn"])
     }
+    migrator.registerMigration("authorTimestamp") { db in
+      try db.alter(table: "author", body: { td in
+        td.add(column: "timestamp", .datetime)
+      })
+    }
     return migrator
   }()
 }

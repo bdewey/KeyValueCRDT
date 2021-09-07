@@ -31,7 +31,7 @@ public final class KeyValueDatabase {
   /// - Parameters:
   ///   - fileURL: The file holding the key/value CRDT.
   ///   - author: The author for any changes to the CRDT created by this instance.
-  public convenience init(fileURL: URL?, author: Author) throws {
+  public convenience init(fileURL: URL?, authorDescription: String) throws {
     let databaseWriter: DatabaseWriter
     if let fileURL = fileURL {
       databaseWriter = try DatabaseQueue.openSharedDatabase(at: fileURL)
@@ -39,28 +39,19 @@ public final class KeyValueDatabase {
       let queue = try DatabaseQueue(path: ":memory:")
       databaseWriter = queue
     }
-    try self.init(databaseWriter: databaseWriter, author: author)
+    try self.init(databaseWriter: databaseWriter, authorDescription: authorDescription)
   }
 
   /// Creates a CRDT from an existing, initialized `DatabaseWriter`
-  public init(databaseWriter: DatabaseWriter, author: Author) throws {
+  public init(databaseWriter: DatabaseWriter, authorDescription: String) throws {
     try DatabaseMigrator.keyValueCRDT.migrate(databaseWriter)
     if try databaseWriter.read(DatabaseMigrator.keyValueCRDT.hasBeenSuperseded) {
       // Database is too recent
       throw KeyValueCRDTError.databaseSchemaTooNew
     }
-    self.author = author
     self.databaseWriter = databaseWriter
-    let authorRecord = try databaseWriter.read { db in
-      try AuthorRecord.filter(key: author.id).fetchOne(db)
-    }
-    if let authorRecord = authorRecord {
-      Logger.kvcrdt.info("Found author record for \(authorRecord.id.uuidString); usn = \(authorRecord.usn)")
-      self.authorRecord = authorRecord
-    } else {
-      Logger.kvcrdt.info("Could not find an author record for \(author.id.uuidString), so creating a new one")
-      self.authorRecord = AuthorRecord(id: author.id, name: author.name, usn: 0)
-    }
+    self.instanceID = UUID()
+    self.authorRecord = AuthorRecord(id: instanceID, name: authorDescription, usn: 0, timestamp: Date())
   }
 
   /// Creates an in-memory clone of the database contents.
@@ -70,8 +61,8 @@ public final class KeyValueDatabase {
     return memoryQueue
   }
 
-  /// The author for any changes to the CRDT made by this instance.
-  public let author: Author
+  /// Identifies this single open instance of the database.
+  public let instanceID: UUID
 
   /// Publishes individual updates to the database.
   ///
@@ -355,7 +346,7 @@ public final class KeyValueDatabase {
       return usn
     }
     values
-      .map { ($0.key, [Version(authorID: author.id, timestamp: timestamp, value: $0.value)]) }
+      .map { ($0.key, [Version(authorID: instanceID, timestamp: timestamp, value: $0.value)]) }
       .forEach { updatedValueSubject.send($0) }
     return usn
   }
@@ -371,7 +362,7 @@ public final class KeyValueDatabase {
       _ = try writeValue(value, to: key.key, scope: key.scope, timestamp: timestamp, in: database, usn: usn)
     }
     values
-      .map { ($0.key, [Version(authorID: author.id, timestamp: timestamp, value: $0.value)]) }
+      .map { ($0.key, [Version(authorID: instanceID, timestamp: timestamp, value: $0.value)]) }
       .forEach { updatedValueSubject.send($0) }
   }
 
@@ -466,12 +457,6 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
   /// or ``readPublisher(keyPrefix:)``.
   public func backup(to destination: KeyValueDatabase) throws {
     try databaseWriter.backup(to: destination.databaseWriter)
-    let authorRecord = try destination.databaseWriter.read { db in
-      try AuthorRecord.filter(key: author.id).fetchOne(db)
-    }
-    if let authorRecord = authorRecord {
-      destination.authorRecord = authorRecord
-    }
   }
 
   /// Erases the version history in this database.
@@ -550,7 +535,7 @@ private extension KeyValueDatabase {
     var entryRecord = EntryRecord(
       scope: scope,
       key: key,
-      authorId: self.author.id,
+      authorId: self.instanceID,
       usn: usn,
       timestamp: timestamp,
       type: value.entryType
@@ -565,9 +550,9 @@ private extension KeyValueDatabase {
     let existingRecords = try EntryRecord
       .filter(EntryRecord.Column.key == key)
       .filter(EntryRecord.Column.scope == scope)
-      .filter(EntryRecord.Column.authorId != author.id)
+      .filter(EntryRecord.Column.authorId != instanceID)
       .fetchAll(db)
-    let tombstones = existingRecords.map { TombstoneRecord($0, deletingAuthorId: author.id, deletingUsn: usn) }
+    let tombstones = existingRecords.map { TombstoneRecord($0, deletingAuthorId: instanceID, deletingUsn: usn) }
     try tombstones.forEach {
       try $0.insert(db)
     }
@@ -580,7 +565,7 @@ private extension KeyValueDatabase {
     for (key, value) in versionVector {
       let authorRecord = AuthorRecord(id: key.id, name: key.name, usn: value)
       try authorRecord.save(db)
-      if authorRecord.id == author.id {
+      if authorRecord.id == instanceID {
         self.authorRecord = authorRecord
       }
     }
