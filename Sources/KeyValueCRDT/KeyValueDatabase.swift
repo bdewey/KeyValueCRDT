@@ -42,16 +42,6 @@ public final class KeyValueDatabase {
     try self.init(databaseWriter: databaseWriter, authorDescription: authorDescription)
   }
 
-  @available(*, deprecated, message: "Use init(fileURL:authorDescription:) instead")
-  public convenience init(fileURL: URL?, author: Author) throws {
-    try self.init(fileURL: fileURL, authorDescription: author.description)
-  }
-
-  @available(*, deprecated, message: "Use init(databaseWriter:authorDescription:) instead")
-  public convenience init(databaseWriter: DatabaseWriter, author: Author) throws {
-    try self.init(databaseWriter: databaseWriter, authorDescription: author.description)
-  }
-
   /// Creates a CRDT from an existing, initialized `DatabaseWriter`
   public init(databaseWriter: DatabaseWriter, authorDescription: String) throws {
     try DatabaseMigrator.keyValueCRDT.migrate(databaseWriter)

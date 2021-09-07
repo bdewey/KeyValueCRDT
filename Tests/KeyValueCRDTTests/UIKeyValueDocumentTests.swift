@@ -8,8 +8,7 @@ final class UIKeyValueDocumentTests: XCTestCase {
     defer {
       try? FileManager.default.removeItem(at: url)
     }
-    let author = Author(id: UUID(), name: "testBasics")
-    let document = try UIKeyValueDocument(fileURL: url, author: author)
+    let document = try UIKeyValueDocument(fileURL: url, authorDescription: "testBasics")
     let openedExpectation = expectation(description: "opened")
     document.open { success in
       XCTAssertTrue(success)
@@ -26,7 +25,7 @@ final class UIKeyValueDocumentTests: XCTestCase {
     }
     waitForExpectations(timeout: 3)
 
-    let roundTrip = try UIKeyValueDocument(fileURL: url, author: author)
+    let roundTrip = try UIKeyValueDocument(fileURL: url, authorDescription: "testBasics")
     let rtOpen = expectation(description: "Round trip open")
     roundTrip.open { success in
       XCTAssertTrue(success)

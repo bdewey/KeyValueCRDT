@@ -40,11 +40,6 @@ public final class UIKeyValueDocument: UIDocument {
     super.init(fileURL: fileURL)
   }
 
-  @available(*, deprecated, message: "Use init(fileURL:authorDescription:) instead")
-  public convenience init(fileURL: URL, author: Author) throws {
-    try self.init(fileURL: fileURL, authorDescription: author.description)
-  }
-
   public weak var delegate: UIKeyValueDocumentDelegate?
 
   /// A human-readable hint identifying the author of any changes made from this instance.
