@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.0] - 2021-09-18
+
+- Updated GRDB and builds with Xcode 13 RC
+
 ## [0.4.0-beta] - 2021-09-06
 
 ### Changed

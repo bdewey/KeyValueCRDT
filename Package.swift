@@ -17,7 +17,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-      .package(url: "https://github.com/bdewey/GRDB.swift", branch: "xcode13"),
+      .package(url: "https://github.com/bdewey/GRDB.swift", .upToNextMajor(from: "5.11.0")),
       .package(url: "https://github.com/apple/swift-log", .upToNextMajor(from: "1.4.0")),
       .package(url: "https://github.com/apple/swift-argument-parser", from: "0.4.0"),
     ],
