@@ -57,6 +57,15 @@ internal extension DatabaseMigrator {
         td.add(column: "timestamp", .datetime)
       })
     }
+    migrator.registerMigration("internalMetadata") { db in
+      try db.create(table: InternalMetadataRecord.databaseTableName, body: { td in
+        td.column("id", .integer).primaryKey()
+        td.column("majorVersion", .integer).notNull()
+        td.column("minorVersion", .integer).notNull()
+      })
+      let version = InternalMetadataRecord(id: 1, majorVersion: 1, minorVersion: 0)
+      try version.insert(db)
+    }
     return migrator
   }()
 }

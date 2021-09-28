@@ -12,4 +12,7 @@ public enum KeyValueCRDTError: Error {
 
   /// Something's wrong with the author table.
   case authorTableInconsistency
+
+  /// The internal metadata is corrupt.
+  case corruptMetadata
 }

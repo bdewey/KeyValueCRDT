@@ -45,9 +45,13 @@ public final class KeyValueDatabase {
   /// Creates a CRDT from an existing, initialized `DatabaseWriter`
   public init(databaseWriter: DatabaseWriter, authorDescription: String) throws {
     try DatabaseMigrator.keyValueCRDT.migrate(databaseWriter)
-    if try databaseWriter.read(DatabaseMigrator.keyValueCRDT.hasBeenSuperseded) {
-      // Database is too recent
-      throw KeyValueCRDTError.databaseSchemaTooNew
+    try databaseWriter.read { db in
+      guard let metadata = try InternalMetadataRecord.fetchOne(db, id: 1) else {
+        throw KeyValueCRDTError.corruptMetadata
+      }
+      if metadata.majorVersion > 1 {
+        throw KeyValueCRDTError.databaseSchemaTooNew
+      }
     }
     self.databaseWriter = databaseWriter
     self.instanceID = UUID()
