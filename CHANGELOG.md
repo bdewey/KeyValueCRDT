@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.0] - 2021-09-30
+
+### Added
+
+- `valuePublisher()` for observing the results of arbitrary database queries.
+
 ## [1.0.0] - 2021-09-18
 
 - Updated GRDB and builds with Xcode 13 RC
