@@ -308,6 +308,12 @@ public final class KeyValueDatabase {
     return publisher(for: query)
   }
 
+  /// Publishes changes for the value resulting from an arbitrary fetch from the database.
+  /// - Returns: A publisher for the results of `fetch`
+  public func valuePublisher<Value>(_ fetch: @escaping (Database) throws -> Value) -> AnyPublisher<Value, Error> {
+    ValueObservation.tracking(fetch).publisher(in: databaseWriter).eraseToAnyPublisher()
+  }
+
   private func publisher(for query: QueryInterfaceRequest<EntryRecord>) -> AnyPublisher<[ScopedKey: [Version]], Error> {
     return ValueObservation
       .tracking(query.fetchAll)
