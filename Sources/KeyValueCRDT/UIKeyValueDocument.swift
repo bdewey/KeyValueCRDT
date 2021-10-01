@@ -35,9 +35,8 @@ public final class UIKeyValueDocument: UIDocument {
   ///
   /// - parameter fileURL: The URL for the key-value CRDT database.
   /// - parameter author: An ``Author`` struct that identifies all changes made by this instance.
-  public init(fileURL: URL, authorDescription: String, configuration: Configuration = Configuration()) throws {
+  public init(fileURL: URL, authorDescription: String) throws {
     self.authorDescription = authorDescription
-    self.databaseConfiguration = configuration
     super.init(fileURL: fileURL)
   }
 
@@ -45,9 +44,6 @@ public final class UIKeyValueDocument: UIDocument {
 
   /// A human-readable hint identifying the author of any changes made from this instance.
   public let authorDescription: String
-
-  /// Configuration for the database. (E.g., use this to install custom functions)
-  public let databaseConfiguration: Configuration
 
   /// The key-value CRDT stored in the document.
   ///
@@ -109,8 +105,7 @@ public final class UIKeyValueDocument: UIDocument {
       Logger.keyValueDocument.info("Updated keys from merge: \(changedEntries.count)")
     } else {
       Logger.keyValueDocument.info("Loading initial copy of database into memory")
-      let queue = try DatabaseQueue(path: ":memory:", configuration: databaseConfiguration)
-      let inMemoryCopy = try KeyValueDatabase(databaseWriter: queue, authorDescription: authorDescription)
+      let inMemoryCopy = try KeyValueDatabase(fileURL: nil, authorDescription: authorDescription)
       try onDiskData.backup(to: inMemoryCopy)
       self.keyValueCRDT = inMemoryCopy
     }
