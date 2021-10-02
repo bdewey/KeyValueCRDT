@@ -10,7 +10,7 @@ Handling version conflicts is a tricky thing to get right. The goal of `KeyValue
 
 ## Installing
 
-**KeyValueCRDT uses Swift 5.5 language features and requires Xcode 13 Beta.**
+**KeyValueCRDT uses Swift 5.5 language features and requires Xcode 13.**
 
 `KeyValueCRDT` uses Swift Package Manager. To install, add this to the `dependencies:` section in your `Package.swift` file:
 
@@ -24,10 +24,8 @@ Handling version conflicts is a tricky thing to get right. The goal of `KeyValue
 
 Opening a key-value database is simple: Create an instance of the `KeyValueDatabase` class and give it a URL to your database file. Under the covers, `KeyValueDatabase` uses sqlite to store the key/value pairs.
 
-Note that you need to provide an `Author` when you open the key/value database. `KeyValueDatabase` uses this value to detect conflicting changes to keys. We'll cover `Author` in more detail later.
-
 ```swift
-let database = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "test"))
+let database = try KeyValueDatabase(fileURL: fileURL, authorDescription: "Brian's iPhone")
 ```
 
 ### Writing and reading values from the database: The basics
@@ -94,8 +92,8 @@ Things get interesting when there are conflicting changes to the same key. `KeyV
 
 ```swift
 // Create two databases
-let aliceDatabase = try KeyValueDatabase(fileURL: aliceURL, author: Author(id: UUID(), name: "Alice"))
-let bobDatabase = try KeyValueDatabase(fileURL: bobURL, author: Author(id: UUID(), name: "Bob"))
+let aliceDatabase = try KeyValueDatabase(fileURL: aliceURL, authorDescription: "Alice's iPhone")
+let bobDatabase = try KeyValueDatabase(fileURL: bobURL, authorDescription: "Bob's iPhone")
 
 // Write **different values to the same key**
 try aliceDatabase.writeText("From Alice", to: "shared")
@@ -177,6 +175,36 @@ extension Array where Element == Version {
     resolver.resolveVersions(self)
   }
 }
+```
+
+### Application Data Versioning
+
+`KeyValueCRDT` is designed as a generic file format. You are **strongly** encouraged to use the `applicationIdentifier` property to identify the specific application data format & version number you are storing inside a `KeyValueCRDT` database. Otherwise, you can easily get corruption when a user creates a file with an updated version of software and then opens that same file with an old version of the software.
+
+The recommended way to use the `applicationIdentifer` is to create a type that conforms to `ApplicationDataUpgrader` and pass an instance of that type into the `KeyValueDatabase` constructor, like so:
+
+```swift
+struct Upgrader: ApplicationDataUpgrader {
+  // This says we expect to work with version 1.1 of the "library notes" file format.
+  let expectedApplicationIdentifier = ApplicationIdentifier(id: "org.brians-brain.library-notes", majorVersion: 1, minorVersion: 1)
+
+  // This function gets called when you are trying to open a file that is *older* than what you expect.
+  // (E.g., version 1.0 of the "library notes" file format)
+  //
+  // If this function completes without throwing an error, `KeyValueCRDT` assumes that it the database now has
+  // application data version `expectedApplicationIdentifier` and changes the application identifier for the database.
+  func upgradeApplicationData(in database: KeyValueDatabase) throws {
+
+  }
+}
+
+// This version of the initializer will check the application data version of the database when you open it.
+//
+// 1. If the database has a different `applicationIdentifier.id` value than what is expected, it throws an error. (You're trying to open data from an altogether different app.)
+// 2. If the database `applicationIdentifier.majorVersion` is *greater* than what you expect, it throws an error. (You're trying to open data that is newer than you know how to handle.)
+// 3. If the database `(majorVersion, minorVersion)` is *less than* what you expect, it calls your upgrader's `upgradeApplicationData(in:)` method so you can upgrade to the new file format.
+// 4. If the version number matches what you expect, the database opens without calling your upgrader.
+let database = KeyValueDatabase(fileURL: fileURL, authorDescription: "Test", upgrader: Upgrader())
 ```
 
 ### Advanced Topics
