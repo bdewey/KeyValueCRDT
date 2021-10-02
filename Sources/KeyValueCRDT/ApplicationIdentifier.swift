@@ -5,15 +5,15 @@ import GRDB
 
 /// Stores information about the application that created the key-value store.
 public struct ApplicationIdentifier: Codable, Comparable {
-  public init(applicationIdentifier: String, majorVersion: Int, minorVersion: Int, applicationDescription: String? = nil) {
-    self.applicationIdentifier = applicationIdentifier
+  public init(id: String, majorVersion: Int, minorVersion: Int, applicationDescription: String? = nil) {
+    self.id = id
     self.majorVersion = majorVersion
     self.minorVersion = minorVersion
     self.applicationDescription = applicationDescription
   }
 
   /// Application identifier, in reverse-DNS. Primary key of this table.
-  var applicationIdentifier: String
+  var id: String
 
   /// Major version number of the file format.
   var majorVersion: Int
@@ -25,7 +25,7 @@ public struct ApplicationIdentifier: Codable, Comparable {
   var applicationDescription: String?
 
   public static func < (lhs: ApplicationIdentifier, rhs: ApplicationIdentifier) -> Bool {
-    (lhs.applicationIdentifier, lhs.majorVersion, lhs.minorVersion) < (rhs.applicationIdentifier, rhs.majorVersion, rhs.minorVersion)
+    (lhs.id, lhs.majorVersion, lhs.minorVersion) < (rhs.id, rhs.majorVersion, rhs.minorVersion)
   }
 
   public enum ComparisonResult {
@@ -39,7 +39,7 @@ public struct ApplicationIdentifier: Codable, Comparable {
     guard let other = other else {
       return .requiresUpgrade
     }
-    if applicationIdentifier != other.applicationIdentifier {
+    if id != other.id {
       return .incompatible
     }
     if other.majorVersion > majorVersion {
@@ -57,3 +57,22 @@ public struct ApplicationIdentifier: Codable, Comparable {
 extension ApplicationIdentifier: FetchableRecord, PersistableRecord {
   public static let databaseTableName = "applicationIdentifier"
 }
+
+internal extension ApplicationDataUpgrader {
+  func upgrade(database: KeyValueDatabase) throws {
+    let comparisonResult = expectedApplicationIdentifier.compare(to: try database.applicationIdentifier)
+    switch comparisonResult {
+    case .compatible:
+      // nothing to do
+      break
+    case .incompatible:
+      throw KeyValueCRDTError.incompatibleApplications
+    case .requiresUpgrade:
+      try upgradeApplicationData(in: database)
+      try database.setApplicationIdentifier(expectedApplicationIdentifier)
+    case .currentVersionIsTooOld:
+      throw KeyValueCRDTError.applicationDataTooNew
+    }
+  }
+}
+

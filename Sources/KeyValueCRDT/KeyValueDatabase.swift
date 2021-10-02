@@ -28,24 +28,6 @@ public protocol ApplicationDataUpgrader {
   func upgradeApplicationData(in database: KeyValueDatabase) throws
 }
 
-private extension ApplicationDataUpgrader {
-  func upgrade(database: KeyValueDatabase) throws {
-    let comparisonResult = expectedApplicationIdentifier.compare(to: try database.applicationIdentifier)
-    switch comparisonResult {
-    case .compatible:
-      // nothing to do
-      break
-    case .incompatible:
-      throw KeyValueCRDTError.incompatibleApplications
-    case .requiresUpgrade:
-      try upgradeApplicationData(in: database)
-      try database.setApplicationIdentifier(expectedApplicationIdentifier)
-    case .currentVersionIsTooOld:
-      throw KeyValueCRDTError.applicationDataTooNew
-    }
-  }
-}
-
 /// Implements a key/value CRDT backed by a single sqlite database.
 ///
 /// `KeyValueDatabase` provides a *scoped* key/value storage backed by a single sqlite database. The database is a *conflict-free replicated data type* (CRDT), meaning
@@ -480,7 +462,7 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
     if let applicationIdentifier = try self.applicationIdentifier,
        let otherApplicationIdentifier = try source.applicationIdentifier {
       switch applicationIdentifier.compare(to: otherApplicationIdentifier) {
-      case .currentVersionIsTooOld, .incompatible, .requiresUpgrade:
+      case .currentVersionIsTooOld, .incompatible:
         throw KeyValueCRDTError.mergeSourceIncompatible
       case .requiresUpgrade:
         throw KeyValueCRDTError.mergeSourceRequiresUpgrade

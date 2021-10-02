@@ -42,4 +42,29 @@ final class UIKeyValueDocumentTests: XCTestCase {
     }
     waitForExpectations(timeout: 3)
   }
+
+  @available(iOS 15.0, *)
+  func testUpgrader() async throws {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("testUpgrader.kvcrdt")
+    defer {
+      try? FileManager.default.removeItem(at: url)
+    }
+
+    let initialDocument = try await UIKeyValueDocument(fileURL: url, authorDescription: "test", upgrader: GenericUpgrader(.tests))
+    await initialDocument.open()
+    await initialDocument.save(to: url, for: .forCreating)
+    await initialDocument.close()
+
+    var didUpgrade = false
+    let secondDocument = try await UIKeyValueDocument(fileURL: url, authorDescription: "testv2", upgrader: GenericUpgrader(.testsV2, upgradeBlock: { didUpgrade = true }))
+    let secondOpenSuccess = await secondDocument.open()
+    XCTAssertTrue(secondOpenSuccess)
+    try await secondDocument.keyValueCRDT?.writeText("Hello, world", to: "greeting")
+    await secondDocument.close()
+    XCTAssertTrue(didUpgrade)
+
+    let downgradeDocument = try await UIKeyValueDocument(fileURL: url, authorDescription: "test", upgrader: GenericUpgrader(.tests))
+    let downgradeSuccess = await downgradeDocument.open()
+    XCTAssertFalse(downgradeSuccess)
+  }
 }

@@ -547,20 +547,6 @@ private struct UpgradeToV2: ApplicationDataUpgrader {
   }
 }
 
-private struct GenericUpgrader: ApplicationDataUpgrader {
-  let expectedApplicationIdentifier: ApplicationIdentifier
-  let upgradeBlock: (() -> Void)?
-
-  init(_ applicationIdentifier: ApplicationIdentifier, upgradeBlock: (() -> Void)? = nil) {
-    self.expectedApplicationIdentifier = applicationIdentifier
-    self.upgradeBlock = upgradeBlock
-  }
-
-  func upgradeApplicationData(in database: KeyValueDatabase) throws {
-    upgradeBlock?()
-  }
-}
-
 private struct DifferentApplicationUpgrader: ApplicationDataUpgrader {
   let expectedApplicationIdentifier: ApplicationIdentifier = .differentApplication
 
@@ -579,11 +565,4 @@ private extension String {
   static let alice = "Alice"
   static let bob = "Bob"
   static let charlie = "Charlie"
-}
-
-private extension ApplicationIdentifier {
-  static let tests = ApplicationIdentifier(applicationIdentifier: "org.brians-brain.KeyValueCRDTTests", majorVersion: 1, minorVersion: 0)
-  static let testsV2 = ApplicationIdentifier(applicationIdentifier: "org.brians-brain.KeyValueCRDTTests", majorVersion: 2, minorVersion: 0)
-  static let testsV21 = ApplicationIdentifier(applicationIdentifier: "org.brians-brain.KeyValueCRDTTests", majorVersion: 2, minorVersion: 1)
-  static let differentApplication = ApplicationIdentifier(applicationIdentifier: "org.brians-brain.dreaming", majorVersion: 13, minorVersion: 0)
 }
