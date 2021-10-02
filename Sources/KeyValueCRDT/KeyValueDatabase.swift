@@ -11,6 +11,41 @@ private extension Logger {
   }()
 }
 
+/// If needed, can upgrade the data inside a ``KeyValueDatabase`` to a new version.
+public protocol ApplicationDataUpgrader {
+  /// The expected application data version contained in a ``KeyValueDatabase``.
+  ///
+  /// You will open a database without any issues and without calling ``ApplicationDataUpgrader/upgradeApplicationData(in:)`` if `expectedApplicationIdentifier` equals ``KeyValueDatabase/applicationIdentifier``.
+  ///
+  /// If the expected major version is greater than the actual major version, or if the minor versions don't match, then ``KeyValueDatabase/init(databaseWriter:authorDescription:upgrader:)`` will call ``ApplicationDataUpgrader/upgradeApplicationData(in:)`` during initialization.
+  ///
+  /// You will not be able to open a database if:
+  /// - `expectedApplicationIdentifier.applicationIdentifier` is not equal to ``KeyValueDatabase/applicationIdentifier/applicationIdentifier``
+  /// - `expectedApplicationIdentifier.majorVersion` is less than ``KeyValueDatabase/applicationIdentifier/majorVersion``
+  var expectedApplicationIdentifier: ApplicationIdentifier { get }
+
+  /// A method called to upgrade the data in `database` if the expected version does not match the actual version.
+  func upgradeApplicationData(in database: KeyValueDatabase) throws
+}
+
+private extension ApplicationDataUpgrader {
+  func upgrade(database: KeyValueDatabase) throws {
+    let comparisonResult = expectedApplicationIdentifier.compare(to: try database.applicationIdentifier)
+    switch comparisonResult {
+    case .compatible:
+      // nothing to do
+      break
+    case .incompatible:
+      throw KeyValueCRDTError.incompatibleApplications
+    case .requiresUpgrade:
+      try upgradeApplicationData(in: database)
+      try database.setApplicationIdentifier(expectedApplicationIdentifier)
+    case .currentVersionIsTooOld:
+      throw KeyValueCRDTError.applicationDataTooNew
+    }
+  }
+}
+
 /// Implements a key/value CRDT backed by a single sqlite database.
 ///
 /// `KeyValueDatabase` provides a *scoped* key/value storage backed by a single sqlite database. The database is a *conflict-free replicated data type* (CRDT), meaning
@@ -31,7 +66,7 @@ public final class KeyValueDatabase {
   /// - Parameters:
   ///   - fileURL: The file holding the key/value CRDT.
   ///   - author: The author for any changes to the CRDT created by this instance.
-  public convenience init(fileURL: URL?, authorDescription: String) throws {
+  public convenience init(fileURL: URL?, authorDescription: String, upgrader: ApplicationDataUpgrader? = nil) throws {
     let databaseWriter: DatabaseWriter
     if let fileURL = fileURL {
       databaseWriter = try DatabaseQueue.openSharedDatabase(at: fileURL)
@@ -39,11 +74,11 @@ public final class KeyValueDatabase {
       let queue = try DatabaseQueue(path: ":memory:")
       databaseWriter = queue
     }
-    try self.init(databaseWriter: databaseWriter, authorDescription: authorDescription)
+    try self.init(databaseWriter: databaseWriter, authorDescription: authorDescription, upgrader: upgrader)
   }
 
   /// Creates a CRDT from an existing, initialized `DatabaseWriter`
-  public init(databaseWriter: DatabaseWriter, authorDescription: String) throws {
+  public init(databaseWriter: DatabaseWriter, authorDescription: String, upgrader: ApplicationDataUpgrader? = nil) throws {
     try DatabaseMigrator.keyValueCRDT.migrate(databaseWriter)
     if try databaseWriter.read(DatabaseMigrator.keyValueCRDT.hasBeenSuperseded) {
       // Database is too recent
@@ -52,6 +87,7 @@ public final class KeyValueDatabase {
     self.databaseWriter = databaseWriter
     self.instanceID = UUID()
     self.authorRecord = AuthorRecord(id: instanceID, name: authorDescription, usn: 0, timestamp: Date())
+    try upgrader?.upgrade(database: self)
   }
 
   /// Creates an in-memory clone of the database contents.
@@ -76,6 +112,25 @@ public final class KeyValueDatabase {
 
   /// Holds the current author record so we don't have to keep re-reading it.
   private var authorRecord: AuthorRecord
+
+  /// Optional identifier for the creator & version of this key-value store.
+  public var applicationIdentifier: ApplicationIdentifier? {
+    get throws {
+      try databaseWriter.read { db in
+        let identifiers = try ApplicationIdentifier.fetchAll(db)
+        assert(identifiers.count < 2)
+        return identifiers.first
+      }
+    }
+  }
+
+  public func setApplicationIdentifier(_ applicationIdentifier: ApplicationIdentifier) throws {
+    try databaseWriter.write({ db in
+      // Ensure there's only ever one ApplicationIdentifier in the database.
+      _ = try? ApplicationIdentifier.deleteAll(db)
+      try applicationIdentifier.insert(db)
+    })
+  }
 
   /// Gets the current number of entries in the database.
   public var statistics: Statistics {
@@ -422,6 +477,21 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
   /// - returns: The keys that changed because of this merge.
   @discardableResult
   public func merge(source: KeyValueDatabase, dryRun: Bool = false) throws -> Set<ScopedKey> {
+    if let applicationIdentifier = try self.applicationIdentifier,
+       let otherApplicationIdentifier = try source.applicationIdentifier {
+      switch applicationIdentifier.compare(to: otherApplicationIdentifier) {
+      case .currentVersionIsTooOld, .incompatible, .requiresUpgrade:
+        throw KeyValueCRDTError.mergeSourceIncompatible
+      case .requiresUpgrade:
+        throw KeyValueCRDTError.mergeSourceRequiresUpgrade
+      case .compatible:
+        break
+      }
+    }
+
+    if (try applicationIdentifier) != (try source.applicationIdentifier) {
+      throw KeyValueCRDTError.incompatibleApplications
+    }
     var updatedKeys = Set<ScopedKey>()
     var updatedValues: [(ScopedKey, [Version])] = []
     try databaseWriter.write { localDB in
