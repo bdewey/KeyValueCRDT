@@ -1,8 +1,25 @@
+//  Licensed to the Apache Software Foundation (ASF) under one
+//  or more contributor license agreements.  See the NOTICE file
+//  distributed with this work for additional information
+//  regarding copyright ownership.  The ASF licenses this file
+//  to you under the Apache License, Version 2.0 (the
+//  "License"); you may not use this file except in compliance
+//  with the License.  You may obtain a copy of the License at
+//
+//  http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing,
+//  software distributed under the License is distributed on an
+//  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+//  KIND, either express or implied.  See the License for the
+//  specific language governing permissions and limitations
+//  under the License.
+
 import Combine
 import Foundation
+import GRDB
 import KeyValueCRDT
 import XCTest
-import GRDB
 
 final class KeyValueCRDTTests: XCTestCase {
   func testSimpleStorage() throws {
@@ -414,7 +431,7 @@ final class KeyValueCRDTTests: XCTestCase {
 
     // In contrast, `updatedValuesPublisher` is "cold". It publishes only values that change after they change.
     let updatedValueExpectation = expectation(description: "updated value publisher")
-    let valuesSubscription = alice.updatedValuesPublisher.sink { (scopedKey, versions) in
+    let valuesSubscription = alice.updatedValuesPublisher.sink { scopedKey, versions in
       XCTAssertEqual(scopedKey, "key2")
       XCTAssertEqual(try! versions.text, "updated")
       updatedValueExpectation.fulfill()
@@ -439,7 +456,7 @@ final class KeyValueCRDTTests: XCTestCase {
     let sharedKeyExpectation = expectation(description: "shared key")
     let soloKeyExpectation = expectation(description: "solo key")
 
-    let subscription = alice.updatedValuesPublisher.sink { (scopedKey, versions) in
+    let subscription = alice.updatedValuesPublisher.sink { scopedKey, versions in
       if scopedKey == "shared" {
         sharedKeyExpectation.fulfill()
       }
@@ -504,7 +521,7 @@ final class KeyValueCRDTTests: XCTestCase {
 
   func testCanOpenWithMinorDifference() throws {
     let storage = try DatabaseQueue(path: ":memory:")
-    let _ = try KeyValueDatabase(databaseWriter: storage, authorDescription: .alice, upgrader: GenericUpgrader(.testsV21))
+    _ = try KeyValueDatabase(databaseWriter: storage, authorDescription: .alice, upgrader: GenericUpgrader(.testsV21))
     var didUpgrade = false
     let v2database = try KeyValueDatabase(databaseWriter: storage, authorDescription: .bob, upgrader: GenericUpgrader(.testsV2, upgradeBlock: { didUpgrade = true }))
     XCTAssertFalse(didUpgrade)

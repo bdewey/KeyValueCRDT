@@ -1,3 +1,20 @@
+//  Licensed to the Apache Software Foundation (ASF) under one
+//  or more contributor license agreements.  See the NOTICE file
+//  distributed with this work for additional information
+//  regarding copyright ownership.  The ASF licenses this file
+//  to you under the Apache License, Version 2.0 (the
+//  "License"); you may not use this file except in compliance
+//  with the License.  You may obtain a copy of the License at
+//
+//  http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing,
+//  software distributed under the License is distributed on an
+//  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+//  KIND, either express or implied.  See the License for the
+//  specific language governing permissions and limitations
+//  under the License.
+
 import Combine
 import Foundation
 import GRDB
@@ -107,11 +124,11 @@ public final class KeyValueDatabase {
   }
 
   public func setApplicationIdentifier(_ applicationIdentifier: ApplicationIdentifier) throws {
-    try databaseWriter.write({ db in
+    try databaseWriter.write { db in
       // Ensure there's only ever one ApplicationIdentifier in the database.
       _ = try? ApplicationIdentifier.deleteAll(db)
       try applicationIdentifier.insert(db)
-    })
+    }
   }
 
   /// Gets the current number of entries in the database.
@@ -275,24 +292,24 @@ public final class KeyValueDatabase {
       query = query.filter(EntryRecord.Column.key == key)
     }
     let records = try query.fetchAll(database)
-    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues { $0.map(Version.init) }
   }
 
   public func bulkReadAllScopes(keyPrefix: String) throws -> [ScopedKey: [Version]] {
     let records = try databaseWriter.read { db in
       try EntryRecord.filter(EntryRecord.Column.key.like("\(keyPrefix)%")).fetchAll(db)
     }
-    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues { $0.map(Version.init) }
   }
 
   public func bulkRead(keys: [String]) throws -> [ScopedKey: [Version]] {
     let records = try databaseWriter.read { db -> [EntryRecord] in
       let keyList = keys
-        .map({ "'\($0)'" }) // Wrap each string in double quotes
+        .map { "'\($0)'" } // Wrap each string in double quotes
         .joined(separator: ", ") // comma separate
       return try EntryRecord.filter(sql: "key IN (\(keyList))").fetchAll(db)
     }
-    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues { $0.map(Version.init) }
   }
 
   public func bulkRead(isIncluded: (String, String) -> Bool) throws -> [ScopedKey: [Version]] {
@@ -314,7 +331,7 @@ public final class KeyValueDatabase {
         records.append(record)
       }
     }
-    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues { $0.map(Version.init) }
   }
 
   /// Publishes changes to the values for any matching key.
@@ -350,9 +367,9 @@ public final class KeyValueDatabase {
   private func publisher(for query: QueryInterfaceRequest<EntryRecord>) -> AnyPublisher<[ScopedKey: [Version]], Error> {
     return ValueObservation
       .tracking(query.fetchAll)
-      .map({ records in
-        Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
-      })
+      .map { records in
+        Dictionary(grouping: records, by: ScopedKey.init).mapValues { $0.map(Version.init) }
+      }
       .publisher(in: databaseWriter)
       .eraseToAnyPublisher()
   }
@@ -422,10 +439,10 @@ public final class KeyValueDatabase {
   public func searchText(for searchTerm: String) throws -> [ScopedKey] {
     let pattern = FTS5Pattern(matchingAllTokensIn: searchTerm)
     let sql = """
-SELECT entry.scope, entry.key
-FROM entry
-JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH ?
-"""
+    SELECT entry.scope, entry.key
+    FROM entry
+    JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH ?
+    """
     return try databaseWriter.read { db in
       let rows = try Row.fetchAll(db, sql: sql, arguments: [pattern])
       return rows.map { ScopedKey(scope: $0[0], key: $0[1]) }
@@ -460,7 +477,8 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
   @discardableResult
   public func merge(source: KeyValueDatabase, dryRun: Bool = false) throws -> Set<ScopedKey> {
     if let applicationIdentifier = try self.applicationIdentifier,
-       let otherApplicationIdentifier = try source.applicationIdentifier {
+       let otherApplicationIdentifier = try source.applicationIdentifier
+    {
       switch applicationIdentifier.compare(to: otherApplicationIdentifier) {
       case .currentVersionIsTooOld, .incompatible:
         throw KeyValueCRDTError.mergeSourceIncompatible
@@ -593,7 +611,7 @@ private extension KeyValueDatabase {
     var entryRecord = EntryRecord(
       scope: scope,
       key: key,
-      authorId: self.instanceID,
+      authorId: instanceID,
       usn: usn,
       timestamp: timestamp,
       type: value.entryType
@@ -695,7 +713,7 @@ private extension QueryInterfaceRequest where RowDecoder == EntryRecord {
         return EntryRecord.Column.authorId == key.id
       }
     }
-    return self.filter(expressions.joined(operator: .or))
+    return filter(expressions.joined(operator: .or))
   }
 }
 
@@ -708,6 +726,6 @@ private extension QueryInterfaceRequest where RowDecoder == TombstoneRecord {
         return TombstoneRecord.Column.deletingAuthorId == key.id
       }
     }
-    return self.filter(expressions.joined(operator: .or))
+    return filter(expressions.joined(operator: .or))
   }
 }
