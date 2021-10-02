@@ -59,7 +59,7 @@ internal extension DatabaseMigrator {
     }
     migrator.registerMigration("applicationIdentifier") { db in
       try db.create(table: ApplicationIdentifier.databaseTableName, body: { td in
-        td.column("applicationIdentifier", .text).primaryKey()
+        td.column("id", .text).primaryKey()
         td.column("majorVersion", .integer).notNull()
         td.column("minorVersion", .integer).notNull()
         td.column("applicationDescription", .text)
