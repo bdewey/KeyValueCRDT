@@ -1,5 +1,23 @@
+//  Licensed to the Apache Software Foundation (ASF) under one
+//  or more contributor license agreements.  See the NOTICE file
+//  distributed with this work for additional information
+//  regarding copyright ownership.  The ASF licenses this file
+//  to you under the Apache License, Version 2.0 (the
+//  "License"); you may not use this file except in compliance
+//  with the License.  You may obtain a copy of the License at
+//
+//  http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing,
+//  software distributed under the License is distributed on an
+//  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+//  KIND, either express or implied.  See the License for the
+//  specific language governing permissions and limitations
+//  under the License.
+
 import Combine
 import Foundation
+import GRDB
 import KeyValueCRDT
 import XCTest
 
@@ -413,7 +431,7 @@ final class KeyValueCRDTTests: XCTestCase {
 
     // In contrast, `updatedValuesPublisher` is "cold". It publishes only values that change after they change.
     let updatedValueExpectation = expectation(description: "updated value publisher")
-    let valuesSubscription = alice.updatedValuesPublisher.sink { (scopedKey, versions) in
+    let valuesSubscription = alice.updatedValuesPublisher.sink { scopedKey, versions in
       XCTAssertEqual(scopedKey, "key2")
       XCTAssertEqual(try! versions.text, "updated")
       updatedValueExpectation.fulfill()
@@ -438,7 +456,7 @@ final class KeyValueCRDTTests: XCTestCase {
     let sharedKeyExpectation = expectation(description: "shared key")
     let soloKeyExpectation = expectation(description: "solo key")
 
-    let subscription = alice.updatedValuesPublisher.sink { (scopedKey, versions) in
+    let subscription = alice.updatedValuesPublisher.sink { scopedKey, versions in
       if scopedKey == "shared" {
         sharedKeyExpectation.fulfill()
       }
@@ -453,6 +471,104 @@ final class KeyValueCRDTTests: XCTestCase {
 
     try alice.merge(source: bob)
     waitForExpectations(timeout: 3)
+  }
+
+  func testApplicationIdentifier() throws {
+    let database = try KeyValueDatabase(fileURL: nil, authorDescription: .alice)
+    XCTAssertNil(try database.applicationIdentifier)
+    try database.setApplicationIdentifier(.tests)
+    XCTAssertEqual(try database.applicationIdentifier, .tests)
+    try database.setApplicationIdentifier(.testsV2)
+    XCTAssertEqual(try database.applicationIdentifier, .testsV2)
+  }
+
+  func testUnversionedDataUpgrade() throws {
+    let storage = try DatabaseQueue(path: ":memory:")
+    var didUpgradeData = false
+    let upgrader = UpgradeToV2 {
+      didUpgradeData = true
+    }
+    let database = try KeyValueDatabase(databaseWriter: storage, authorDescription: "first", upgrader: upgrader)
+    XCTAssertTrue(didUpgradeData)
+    XCTAssertEqual(try database.applicationIdentifier, upgrader.expectedApplicationIdentifier)
+
+    var didUpgradeDataOnReopen = false
+    let upgradeOnReopen = UpgradeToV2 {
+      didUpgradeDataOnReopen = true
+    }
+    let d2 = try KeyValueDatabase(databaseWriter: storage, authorDescription: "second", upgrader: upgradeOnReopen)
+    XCTAssertFalse(didUpgradeDataOnReopen)
+    XCTAssertEqual(try d2.applicationIdentifier, upgrader.expectedApplicationIdentifier)
+  }
+
+  func testCannotOpenIncompatibleData() throws {
+    let storage = try DatabaseQueue(path: ":memory:")
+    let originalDatabase = try KeyValueDatabase(databaseWriter: storage, authorDescription: .alice, upgrader: UpgradeToV2(didUpgrade: {}))
+    XCTAssertEqual(try originalDatabase.applicationIdentifier, .testsV2)
+    XCTAssertThrowsError(try KeyValueDatabase(databaseWriter: storage, authorDescription: .bob, upgrader: DifferentApplicationUpgrader()))
+  }
+
+  func testCannotOpenTooNewData() throws {
+    let storage = try DatabaseQueue(path: ":memory:")
+    let original = try KeyValueDatabase(databaseWriter: storage, authorDescription: .bob)
+    try original.setApplicationIdentifier(.tests)
+    var didUpgrade = false
+    let originalDatabase = try KeyValueDatabase(databaseWriter: storage, authorDescription: .alice, upgrader: UpgradeToV2(didUpgrade: { didUpgrade = true }))
+    XCTAssertTrue(didUpgrade)
+    XCTAssertEqual(try originalDatabase.applicationIdentifier, .testsV2)
+    XCTAssertThrowsError(try KeyValueDatabase(databaseWriter: storage, authorDescription: .bob, upgrader: UpgradeToV1()))
+  }
+
+  func testCanOpenWithMinorDifference() throws {
+    let storage = try DatabaseQueue(path: ":memory:")
+    _ = try KeyValueDatabase(databaseWriter: storage, authorDescription: .alice, upgrader: GenericUpgrader(.testsV21))
+    var didUpgrade = false
+    let v2database = try KeyValueDatabase(databaseWriter: storage, authorDescription: .bob, upgrader: GenericUpgrader(.testsV2, upgradeBlock: { didUpgrade = true }))
+    XCTAssertFalse(didUpgrade)
+    XCTAssertEqual(try v2database.applicationIdentifier, .testsV21)
+  }
+
+  func testCannotMergeIncompatibleDatabases() throws {
+    let aliceStorage = try DatabaseQueue(path: ":memory:")
+    let alice = try KeyValueDatabase(databaseWriter: aliceStorage, authorDescription: .alice, upgrader: GenericUpgrader(.tests))
+    let bob = try KeyValueDatabase(fileURL: nil, authorDescription: .bob, upgrader: GenericUpgrader(.testsV2))
+
+    // Alice doesn't understand Bob, so this is an error.
+    XCTAssertThrowsError(try alice.merge(source: bob))
+
+    // This is also an error, because Alice should be upgraded.
+    XCTAssertThrowsError(try bob.merge(source: alice))
+
+    let upgradedAlice = try KeyValueDatabase(databaseWriter: aliceStorage, authorDescription: .alice, upgrader: GenericUpgrader(.testsV2))
+
+    // now there shouldn't be an error
+    try bob.merge(source: upgradedAlice)
+  }
+}
+
+private struct UpgradeToV1: ApplicationDataUpgrader {
+  var expectedApplicationIdentifier: ApplicationIdentifier = .tests
+
+  func upgradeApplicationData(in database: KeyValueDatabase) throws {
+    fatalError()
+  }
+}
+
+private struct UpgradeToV2: ApplicationDataUpgrader {
+  let expectedApplicationIdentifier: ApplicationIdentifier = .testsV2
+
+  let didUpgrade: () -> Void
+
+  func upgradeApplicationData(in database: KeyValueDatabase) throws {
+    didUpgrade()
+  }
+}
+
+private struct DifferentApplicationUpgrader: ApplicationDataUpgrader {
+  let expectedApplicationIdentifier: ApplicationIdentifier = .differentApplication
+
+  func upgradeApplicationData(in database: KeyValueDatabase) throws {
+    fatalError()
   }
 }
 

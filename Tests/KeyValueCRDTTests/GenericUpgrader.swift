@@ -16,26 +16,18 @@
 //  under the License.
 
 import Foundation
+import KeyValueCRDT
 
-public enum KeyValueCRDTError: Error {
-  /// The CRDT database has a new version schema that this version does not understand.
-  case databaseSchemaTooNew
+internal struct GenericUpgrader: ApplicationDataUpgrader {
+  let expectedApplicationIdentifier: ApplicationIdentifier
+  let upgradeBlock: (() -> Void)?
 
-  /// The CRDT database has application data stored in a new version format that this version does not understand.
-  case applicationDataTooNew
+  init(_ applicationIdentifier: ApplicationIdentifier, upgradeBlock: (() -> Void)? = nil) {
+    self.expectedApplicationIdentifier = applicationIdentifier
+    self.upgradeBlock = upgradeBlock
+  }
 
-  /// The CRDT database has application data that comes from another application.
-  case incompatibleApplications
-
-  /// There are conflicting versions of a value in a code path that asserted there should be only one.
-  case versionConflict
-
-  /// Attempted to write invalid JSON as a JSON string.
-  case invalidJSON
-
-  /// Something's wrong with the author table.
-  case authorTableInconsistency
-
-  case mergeSourceIncompatible
-  case mergeSourceRequiresUpgrade
+  func upgradeApplicationData(in database: KeyValueDatabase) throws {
+    upgradeBlock?()
+  }
 }

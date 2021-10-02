@@ -1,3 +1,20 @@
+//  Licensed to the Apache Software Foundation (ASF) under one
+//  or more contributor license agreements.  See the NOTICE file
+//  distributed with this work for additional information
+//  regarding copyright ownership.  The ASF licenses this file
+//  to you under the Apache License, Version 2.0 (the
+//  "License"); you may not use this file except in compliance
+//  with the License.  You may obtain a copy of the License at
+//
+//  http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing,
+//  software distributed under the License is distributed on an
+//  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+//  KIND, either express or implied.  See the License for the
+//  specific language governing permissions and limitations
+//  under the License.
+
 import Combine
 import Foundation
 import GRDB
@@ -9,6 +26,23 @@ private extension Logger {
     logger.logLevel = .debug
     return logger
   }()
+}
+
+/// If needed, can upgrade the data inside a ``KeyValueDatabase`` to a new version.
+public protocol ApplicationDataUpgrader {
+  /// The expected application data version contained in a ``KeyValueDatabase``.
+  ///
+  /// You will open a database without any issues and without calling ``ApplicationDataUpgrader/upgradeApplicationData(in:)`` if `expectedApplicationIdentifier` equals ``KeyValueDatabase/applicationIdentifier``.
+  ///
+  /// If the expected major version is greater than the actual major version, or if the minor versions don't match, then ``KeyValueDatabase/init(databaseWriter:authorDescription:upgrader:)`` will call ``ApplicationDataUpgrader/upgradeApplicationData(in:)`` during initialization.
+  ///
+  /// You will not be able to open a database if:
+  /// - `expectedApplicationIdentifier.applicationIdentifier` is not equal to ``KeyValueDatabase/applicationIdentifier/applicationIdentifier``
+  /// - `expectedApplicationIdentifier.majorVersion` is less than ``KeyValueDatabase/applicationIdentifier/majorVersion``
+  var expectedApplicationIdentifier: ApplicationIdentifier { get }
+
+  /// A method called to upgrade the data in `database` if the expected version does not match the actual version.
+  func upgradeApplicationData(in database: KeyValueDatabase) throws
 }
 
 /// Implements a key/value CRDT backed by a single sqlite database.
@@ -31,7 +65,7 @@ public final class KeyValueDatabase {
   /// - Parameters:
   ///   - fileURL: The file holding the key/value CRDT.
   ///   - author: The author for any changes to the CRDT created by this instance.
-  public convenience init(fileURL: URL?, authorDescription: String) throws {
+  public convenience init(fileURL: URL?, authorDescription: String, upgrader: ApplicationDataUpgrader? = nil) throws {
     let databaseWriter: DatabaseWriter
     if let fileURL = fileURL {
       databaseWriter = try DatabaseQueue.openSharedDatabase(at: fileURL)
@@ -39,11 +73,11 @@ public final class KeyValueDatabase {
       let queue = try DatabaseQueue(path: ":memory:")
       databaseWriter = queue
     }
-    try self.init(databaseWriter: databaseWriter, authorDescription: authorDescription)
+    try self.init(databaseWriter: databaseWriter, authorDescription: authorDescription, upgrader: upgrader)
   }
 
   /// Creates a CRDT from an existing, initialized `DatabaseWriter`
-  public init(databaseWriter: DatabaseWriter, authorDescription: String) throws {
+  public init(databaseWriter: DatabaseWriter, authorDescription: String, upgrader: ApplicationDataUpgrader? = nil) throws {
     try DatabaseMigrator.keyValueCRDT.migrate(databaseWriter)
     if try databaseWriter.read(DatabaseMigrator.keyValueCRDT.hasBeenSuperseded) {
       // Database is too recent
@@ -52,6 +86,7 @@ public final class KeyValueDatabase {
     self.databaseWriter = databaseWriter
     self.instanceID = UUID()
     self.authorRecord = AuthorRecord(id: instanceID, name: authorDescription, usn: 0, timestamp: Date())
+    try upgrader?.upgrade(database: self)
   }
 
   /// Creates an in-memory clone of the database contents.
@@ -76,6 +111,25 @@ public final class KeyValueDatabase {
 
   /// Holds the current author record so we don't have to keep re-reading it.
   private var authorRecord: AuthorRecord
+
+  /// Optional identifier for the creator & version of this key-value store.
+  public var applicationIdentifier: ApplicationIdentifier? {
+    get throws {
+      try databaseWriter.read { db in
+        let identifiers = try ApplicationIdentifier.fetchAll(db)
+        assert(identifiers.count < 2)
+        return identifiers.first
+      }
+    }
+  }
+
+  public func setApplicationIdentifier(_ applicationIdentifier: ApplicationIdentifier) throws {
+    try databaseWriter.write { db in
+      // Ensure there's only ever one ApplicationIdentifier in the database.
+      _ = try? ApplicationIdentifier.deleteAll(db)
+      try applicationIdentifier.insert(db)
+    }
+  }
 
   /// Gets the current number of entries in the database.
   public var statistics: Statistics {
@@ -238,24 +292,24 @@ public final class KeyValueDatabase {
       query = query.filter(EntryRecord.Column.key == key)
     }
     let records = try query.fetchAll(database)
-    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues { $0.map(Version.init) }
   }
 
   public func bulkReadAllScopes(keyPrefix: String) throws -> [ScopedKey: [Version]] {
     let records = try databaseWriter.read { db in
       try EntryRecord.filter(EntryRecord.Column.key.like("\(keyPrefix)%")).fetchAll(db)
     }
-    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues { $0.map(Version.init) }
   }
 
   public func bulkRead(keys: [String]) throws -> [ScopedKey: [Version]] {
     let records = try databaseWriter.read { db -> [EntryRecord] in
       let keyList = keys
-        .map({ "'\($0)'" }) // Wrap each string in double quotes
+        .map { "'\($0)'" } // Wrap each string in double quotes
         .joined(separator: ", ") // comma separate
       return try EntryRecord.filter(sql: "key IN (\(keyList))").fetchAll(db)
     }
-    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues { $0.map(Version.init) }
   }
 
   public func bulkRead(isIncluded: (String, String) -> Bool) throws -> [ScopedKey: [Version]] {
@@ -277,7 +331,7 @@ public final class KeyValueDatabase {
         records.append(record)
       }
     }
-    return Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
+    return Dictionary(grouping: records, by: ScopedKey.init).mapValues { $0.map(Version.init) }
   }
 
   /// Publishes changes to the values for any matching key.
@@ -313,9 +367,9 @@ public final class KeyValueDatabase {
   private func publisher(for query: QueryInterfaceRequest<EntryRecord>) -> AnyPublisher<[ScopedKey: [Version]], Error> {
     return ValueObservation
       .tracking(query.fetchAll)
-      .map({ records in
-        Dictionary(grouping: records, by: ScopedKey.init).mapValues({ $0.map(Version.init) })
-      })
+      .map { records in
+        Dictionary(grouping: records, by: ScopedKey.init).mapValues { $0.map(Version.init) }
+      }
       .publisher(in: databaseWriter)
       .eraseToAnyPublisher()
   }
@@ -385,10 +439,10 @@ public final class KeyValueDatabase {
   public func searchText(for searchTerm: String) throws -> [ScopedKey] {
     let pattern = FTS5Pattern(matchingAllTokensIn: searchTerm)
     let sql = """
-SELECT entry.scope, entry.key
-FROM entry
-JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH ?
-"""
+    SELECT entry.scope, entry.key
+    FROM entry
+    JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH ?
+    """
     return try databaseWriter.read { db in
       let rows = try Row.fetchAll(db, sql: sql, arguments: [pattern])
       return rows.map { ScopedKey(scope: $0[0], key: $0[1]) }
@@ -422,6 +476,22 @@ JOIN entryFullText ON entryFullText.rowId = entry.rowId AND entryFullText MATCH 
   /// - returns: The keys that changed because of this merge.
   @discardableResult
   public func merge(source: KeyValueDatabase, dryRun: Bool = false) throws -> Set<ScopedKey> {
+    if let applicationIdentifier = try self.applicationIdentifier,
+       let otherApplicationIdentifier = try source.applicationIdentifier
+    {
+      switch applicationIdentifier.compare(to: otherApplicationIdentifier) {
+      case .currentVersionIsTooOld, .incompatible:
+        throw KeyValueCRDTError.mergeSourceIncompatible
+      case .requiresUpgrade:
+        throw KeyValueCRDTError.mergeSourceRequiresUpgrade
+      case .compatible:
+        break
+      }
+    }
+
+    if (try applicationIdentifier) != (try source.applicationIdentifier) {
+      throw KeyValueCRDTError.incompatibleApplications
+    }
     var updatedKeys = Set<ScopedKey>()
     var updatedValues: [(ScopedKey, [Version])] = []
     try databaseWriter.write { localDB in
@@ -541,7 +611,7 @@ private extension KeyValueDatabase {
     var entryRecord = EntryRecord(
       scope: scope,
       key: key,
-      authorId: self.instanceID,
+      authorId: instanceID,
       usn: usn,
       timestamp: timestamp,
       type: value.entryType
@@ -643,7 +713,7 @@ private extension QueryInterfaceRequest where RowDecoder == EntryRecord {
         return EntryRecord.Column.authorId == key.id
       }
     }
-    return self.filter(expressions.joined(operator: .or))
+    return filter(expressions.joined(operator: .or))
   }
 }
 
@@ -656,6 +726,6 @@ private extension QueryInterfaceRequest where RowDecoder == TombstoneRecord {
         return TombstoneRecord.Column.deletingAuthorId == key.id
       }
     }
-    return self.filter(expressions.joined(operator: .or))
+    return filter(expressions.joined(operator: .or))
   }
 }

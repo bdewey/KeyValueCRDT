@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0] - 2021-10-02
+
+### Added
+
+This version adds the concept of "application data versioning." You are STRONGLY encouraged to add an application identifier and application version to file formats built with KeyValueCRDT. This will prevent old versions of your software from corrupting data written by new versions of your software.
+
 ## [1.1.0] - 2021-09-30
 
 ### Added
