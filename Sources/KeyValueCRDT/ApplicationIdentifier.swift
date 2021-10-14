@@ -28,16 +28,16 @@ public struct ApplicationIdentifier: Codable, Comparable {
   }
 
   /// Application identifier, in reverse-DNS. Primary key of this table.
-  var id: String
+  public var id: String
 
   /// Major version number of the file format.
-  var majorVersion: Int
+  public var majorVersion: Int
 
   /// Minor version number of the file format.
-  var minorVersion: Int
+  public var minorVersion: Int
 
   /// Optional application description.
-  var applicationDescription: String?
+  public var applicationDescription: String?
 
   public static func < (lhs: ApplicationIdentifier, rhs: ApplicationIdentifier) -> Bool {
     (lhs.id, lhs.majorVersion, lhs.minorVersion) < (rhs.id, rhs.majorVersion, rhs.minorVersion)
