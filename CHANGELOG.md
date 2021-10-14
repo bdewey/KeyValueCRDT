@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.1] - 2021-10-13
+
+### Added
+
+- `Applicationidentifier` properties are now `public`
+
 ## [1.2.0] - 2021-10-02
 
 ### Added
