@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.0] - 2023-12-22
+
+### Added
+
+- `Sendable` conformance to public value types
+
 ## [1.2.1] - 2021-10-13
 
 ### Added

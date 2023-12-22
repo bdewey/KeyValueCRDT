@@ -17,7 +17,7 @@
 
 import Foundation
 
-public enum KeyValueCRDTError: Error {
+public enum KeyValueCRDTError: Error, Sendable {
   /// The CRDT database has a new version schema that this version does not understand.
   case databaseSchemaTooNew
 

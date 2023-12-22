@@ -39,7 +39,7 @@ struct Statistics: ParsableCommand {
 
   func run() throws {
     let fileURL = URL(fileURLWithPath: inputOptions.inputFileName)
-    let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
+    let crdt = try KeyValueDatabase(fileURL: fileURL, authorDescription: "KVCRDT Command Line")
     let stats = try crdt.statistics
     let output = """
     Entries:    \(stats.entryCount)
@@ -63,7 +63,7 @@ struct List: ParsableCommand {
 
   func run() throws {
     let fileURL = URL(fileURLWithPath: input.inputFileName)
-    let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
+    let crdt = try KeyValueDatabase(fileURL: fileURL, authorDescription: "KVCRDT Command Line")
     let scopedKeys = try crdt.keys(scope: scope, key: key)
     let table = Table<ScopedKey>(columns: [
       Table.Column(name: "Scope", formatter: { $0.scope }),
@@ -82,7 +82,7 @@ struct Get: ParsableCommand {
 
   func run() throws {
     let fileURL = URL(fileURLWithPath: input.inputFileName)
-    let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "temp"))
+    let crdt = try KeyValueDatabase(fileURL: fileURL, authorDescription: "KVCRDT Command Line")
     let versions = try crdt.read(key: key, scope: scope)
     let showHeader = versions.count > 1
     for version in versions {
@@ -98,7 +98,7 @@ struct EraseVersionHistory: ParsableCommand {
 
   func run() throws {
     let fileURL = URL(fileURLWithPath: input.inputFileName)
-    let crdt = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "KVCRDT Command Line"))
+    let crdt = try KeyValueDatabase(fileURL: fileURL, authorDescription: "KVCRDT Command Line")
     try crdt.eraseVersionHistory()
     print("Success")
   }
@@ -115,9 +115,8 @@ struct Merge: ParsableCommand {
     if dryRun { print("** Dry run **") }
     let sourceURL = URL(fileURLWithPath: source)
     let destURL = URL(fileURLWithPath: dest)
-    let author = Author(id: UUID(), name: "KVCRDT Command Line")
-    let sourceDatabase = try KeyValueDatabase(fileURL: sourceURL, author: author)
-    let destinationDatabase = try KeyValueDatabase(fileURL: destURL, author: author)
+    let sourceDatabase = try KeyValueDatabase(fileURL: sourceURL, authorDescription: "KVCRDT Command Line")
+    let destinationDatabase = try KeyValueDatabase(fileURL: destURL, authorDescription: "KVCRDT Command Line")
     let changedEntries = try destinationDatabase.merge(source: sourceDatabase, dryRun: dryRun)
     let table = Table<ScopedKey>(columns: [
       Table.Column(name: "Scope", formatter: { $0.scope }),
@@ -135,7 +134,7 @@ struct Search: ParsableCommand {
 
   func run() throws {
     let fileURL = URL(fileURLWithPath: input.inputFileName)
-    let database = try KeyValueDatabase(fileURL: fileURL, author: Author(id: UUID(), name: "kvcrdt"))
+    let database = try KeyValueDatabase(fileURL: fileURL, authorDescription: "KVCRDT Command Line")
     let results = try database.searchText(for: searchText)
     let table = Table<ScopedKey>(columns: [
       Table.Column(name: "Scope", formatter: { $0.scope }),

@@ -18,7 +18,7 @@
 import Foundation
 
 /// The kinds of values that can be stored in the database.
-public enum Value: Equatable, ExpressibleByStringLiteral {
+public enum Value: Equatable, ExpressibleByStringLiteral, Sendable {
   case null
   case text(String)
   case json(String)

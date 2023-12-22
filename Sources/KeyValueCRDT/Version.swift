@@ -18,7 +18,7 @@
 import Foundation
 
 /// A read-only snapshot of a ``Value`` at a specific point in time.
-public struct Version: Equatable {
+public struct Version: Equatable, Sendable {
   /// The ID of the author of this version.
   public let authorID: UUID
 

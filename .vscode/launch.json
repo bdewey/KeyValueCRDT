@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "sourceLanguages": [
+                "swift"
+            ],
+            "args": [],
+            "cwd": "${workspaceFolder:KeyValueCRDT}",
+            "name": "Debug kvcrdt",
+            "program": "${workspaceFolder:KeyValueCRDT}/.build/debug/kvcrdt",
+            "preLaunchTask": "swift: Build Debug kvcrdt"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "sourceLanguages": [
+                "swift"
+            ],
+            "args": [],
+            "cwd": "${workspaceFolder:KeyValueCRDT}",
+            "name": "Release kvcrdt",
+            "program": "${workspaceFolder:KeyValueCRDT}/.build/release/kvcrdt",
+            "preLaunchTask": "swift: Build Release kvcrdt"
+        }
+    ]
+}

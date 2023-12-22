@@ -18,7 +18,7 @@
 import Foundation
 
 /// Information about the number of entries in the database.
-public struct Statistics: Equatable {
+public struct Statistics: Equatable, Sendable {
   public init(entryCount: Int, authorCount: Int, tombstoneCount: Int, authorTableIsConsistent: Bool) {
     self.entryCount = entryCount
     self.authorCount = authorCount

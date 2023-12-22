@@ -19,7 +19,7 @@ import Foundation
 import GRDB
 
 /// Stores information about the application that created the key-value store.
-public struct ApplicationIdentifier: Codable, Comparable {
+public struct ApplicationIdentifier: Codable, Comparable, Sendable {
   public init(id: String, majorVersion: Int, minorVersion: Int, applicationDescription: String? = nil) {
     self.id = id
     self.majorVersion = majorVersion
