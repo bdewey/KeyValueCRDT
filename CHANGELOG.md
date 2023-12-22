@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.1] - 2023-12-22
+
+### Added
+
+- Changed GRDB dependency to a non-forked 6.7 (the first version that enables FTS5 full-text search by default).
+
 ## [1.3.0] - 2023-12-22
 
 ### Added
