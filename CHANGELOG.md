@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.0] - 2025-04-13
+
+### Changed
+
+- Changed GRDB dependency to 7.0.
+
 ## [1.3.1] - 2023-12-22
 
 ### Added
